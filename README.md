@@ -6,4 +6,9 @@ Millions of questions are asked every year about drugs. There is a limited numbe
 Video of the challenge's presentation at Collège de France is available at: https://www.college-de-france.fr/site/stephane-mallat/Challenge-2017-2018-Reponses-a-des-questions-pharmaceutiques-par-Posos.htm
 ## Requirements
 - Python 3.6.3
- 
+## Data
+[Input training](https://challengedata.ens.fr/fr/getfile/trainingInputFileChallenger/33)\
+[Output training](https://challengedata.ens.fr/fr/getfile/trainingOutputFileChallenger/33)\
+[Input test](https://challengedata.ens.fr/fr/getfile/trainingOutputFileChallenger/33)\
+Output test is not released yet\
+**Additional data on drugs**: [RCP (Résumé des caractéristiques du produit)](http://agence-prd.ansm.sante.fr/php/ecodex/telecharger/telecharger.php)\
