@@ -11,4 +11,4 @@ Video of the challenge's presentation at Collège de France is available at: htt
 [Output training](https://challengedata.ens.fr/fr/getfile/trainingOutputFileChallenger/33)\
 [Input test](https://challengedata.ens.fr/fr/getfile/trainingOutputFileChallenger/33)\
 Output test is not released yet\
-**Additional data on drugs**: [RCP (Résumé des caractéristiques du produit)](http://agence-prd.ansm.sante.fr/php/ecodex/telecharger/telecharger.php)\
+**Additional data on drugs**: [RCP (Résumé des caractéristiques du produit)](http://agence-prd.ansm.sante.fr/php/ecodex/telecharger/telecharger.php)
