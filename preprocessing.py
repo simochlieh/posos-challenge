@@ -3,6 +3,7 @@ from enchant import Dict
 import re
 
 FR_DICT = Dict("fr_FR")
+DRUG_NAMES_BLACKLIST = ('\n',)
 
 parser = argparse.ArgumentParser(description='This description is shown when -h or --help are passed as arguments.')
 parser.add_argument('--required_0',
@@ -27,7 +28,13 @@ def extract_drug_names(filename):
     drug_names = []
     with open(filename, encoding='ISO-8859-1') as f:
         for line in f:
-            drug_names.append(re.split(r'\s+', line)[1])
+            splits = line.split('\t')
+            if len(splits) > 3 and splits[3] not in DRUG_NAMES_BLACKLIST:
+                try:
+                    drug_names.append(splits[3])
+                except:
+                    print(line)
+                    raise Exception
     return drug_names
 
 
