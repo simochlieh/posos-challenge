@@ -14,6 +14,8 @@ import argparse
 import re
 from params import params_tfidf
 import warnings
+from numpy import genfromtxt
+
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 parser = argparse.ArgumentParser(description='This description is shown when -h or --help are passed as arguments.')
@@ -28,7 +30,7 @@ parser.add_argument('--min_freq',
 # Just reads the csv file by getting rid of the header.
 # For speed and memory matter, it yields a generator of sentences.
 # This is just intended at my own development testing for the below vectorizer
-def read_file(path='/Users/remydubois/Desktop/posos/input_test.csv'):
+def read_file(path='/Users/remydubois/Desktop/posos/input_train.csv'):
 	#Open and get rid of the header
 	with open(path,'r') as f:
 		questions = f.read().splitlines()[1:]
@@ -39,7 +41,9 @@ def read_file(path='/Users/remydubois/Desktop/posos/input_test.csv'):
 		#Strip spaces
 		questions = map(lambda s:s.strip(), questions)
 
-	return questions
+	intent = genfromtxt('/Users/remydubois/Desktop/posos/y_train.csv', delimiter=';',skip_header=1,dtype=int)[:,1]
+
+	return list(questions), intent
 
 
 #Needed to build a class for better integration
@@ -59,23 +63,24 @@ class MyVectorizer(TfidfVectorizer):
 		#Init mother
 		super(MyVectorizer, self).__init__(self, params)
 
-	def fit(self, sentences):
+	def fit(self, sentences, y=None):
 		#Filter words
 		if not self.forbidden_words==[]:
 			sentences = map(lambda s:' '.join([w if w not in self.forbidden_words else self.magic_word for w in s.split()]), sentences)
 		print('Fitting…')
-		super(MyVectorizer, self).fit(sentences)
+		super(MyVectorizer, self).fit(sentences, y=y)
 
 	# Don't know why it needs to be overriden. It looks like if not overriden, fit_transform calls
 	# the mother's method instead of the child one, which is weird.
 	def transform(self,sentences):
 		print('Transforming…')
-		return super(MyVectorizer, self).transform(sentences)
+		out = super(MyVectorizer, self).transform(sentences)
+		return out.toarray()
 
 	# Same remark	
-	def fit_transform(self,sentences):
+	def fit_transform(self,sentences,y=None):
 		sentences = list(sentences)
-		self.fit(sentences)
+		self.fit(sentences, y=y)
 		out = self.transform(sentences)
 		print('Vectorized %i sentences for a total of %i words'%out.shape)
 		return out
@@ -90,7 +95,7 @@ class MyVectorizer(TfidfVectorizer):
 if __name__=='__main__':
 	args = parser.parse_args()
 	
-	questions = read_file()
+	questions, intents = read_file()
 	params_tfidf.update(vars(args))
 	m = MyVectorizer(**params_tfidf)
 	vectorized = m.fit_transform(questions)
