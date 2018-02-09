@@ -1,8 +1,10 @@
 ## This is the tf-idf script for the preprocessing step.
 # it should be tested in the queue of the cleansing step.
 # The read_file func is pointless as it wont be used in real framework.
-# The vectorize func can take as argument any argument of the sklearn tfidfVectorizer __init__ method
-# Argparse is not handled the right way for now.
+# The sklearn tfidfvectorizer class was subclassed in order to integrate
+# The whole process into a sklearn pipeline (very convenient for CV grid testing)
+# This object stores the parameters it was fed with, even if those parameters are accessible
+# Through the params.py file.
 
 #Throws a weird deprecation error btw
 
@@ -10,6 +12,9 @@
 from sklearn.feature_extraction.text import TfidfVectorizer
 import argparse
 import re
+from params import params_tfidf
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 parser = argparse.ArgumentParser(description='This description is shown when -h or --help are passed as arguments.')
 
@@ -30,70 +35,63 @@ def read_file(path='/Users/remydubois/Desktop/posos/input_test.csv'):
 		#Split and leave the question id for now
 		questions = map(lambda s:s.split(';')[1], questions)
 		#Filter punctuation
-		questions = map(lambda s:re.sub('[-?]',' ',s), questions)
+		questions = map(lambda s:re.sub('[-?\']',' ',s), questions)
 		#Strip spaces
 		questions = map(lambda s:s.strip(), questions)
 
 	return questions
 
 
-# This func applies sklearn tfidfvectorizer fit_transform to the fed sentences.
-# Forbidden words can be either a list or a single word
-def vectorize(
-	sentences, 
-	forbidden_words=[],
-	magic_word='',
-	 **kwargs):
-
-	#default params for tfidf
-	params =	{
-		'input':"content", 
-		'encoding':"utf-8", 
-		'decode_error':"strict", 
-		'strip_accents':None, 
-		'lowercase':True, 
-		'preprocessor':None, 
-		'tokenizer':None, 
-		'analyzer':"word", 
-		'stop_words':None, 
-		#'token_pattern':"(?u)\b\w\w+\b", 
-		'ngram_range':(1, 1), 
-		'max_df':1.0, 
-		'min_df':1, 
-		'max_features':None, 
-		'vocabulary':None, 
-		'binary':False, 
-		#dtype:<class "numpy.int64">, 
-		'norm':"l2", 
-		'use_idf':True, 
-		'smooth_idf':True, 
-		'sublinear_tf':False}
-
-	#Use kwargs, feed em to the params dictionary
-	params.update(kwargs)
+#Needed to build a class for better integration
+class MyVectorizer(TfidfVectorizer):
 	
-	#Create transformer object with the given parameters
-	transformer = TfidfVectorizer(**params)
+	# In practice, 
+	# all the sklearn parameters will be fed into this __init__ from the params.py file.
+	def __init__(self, forbidden_words=[], magic_word='',**kwargs):
+		self.forbidden_words = forbidden_words
+		self.magic_word = magic_word
 
-	#Filter the drug names if needed. Replace em with whatever desired: blank or any token.
-	#Convert if lazy mistake
-	forbidden_words = forbidden_words if hasattr(forbidden_words, '__iter__') else [forbidden_words]
-	#Filter
-	if not forbidden_words==[]:
-		sentences_filtered = map(lambda s:' '.join([w if w not in forbidden_words else magic_word for w in s.split()]), sentences)
+		#Get params
+		params = {'forbidden_words':forbidden_words,'magic_word':magic_word}
+		params.update(kwargs)
+		self._params = params
 
-	#Vectorize. this return a sparse matrix of dim (#Sentences, Vocabulary size).
-	vectorized = transformer.fit_transform(sentences)
-	print("Vectorized…\nVocabulary size: %i, and %i sentences"%vectorized.shape)
+		#Init mother
+		super(MyVectorizer, self).__init__(self, params)
 
-	#Returns the vectorized sparse matrix AND the params used for vectorization, for better experiment tracking.
-	return vectorized, params
+	def fit(self, sentences):
+		#Filter words
+		if not self.forbidden_words==[]:
+			sentences = map(lambda s:' '.join([w if w not in self.forbidden_words else self.magic_word for w in s.split()]), sentences)
+		print('Fitting…')
+		super(MyVectorizer, self).fit(sentences)
+
+	# Don't know why it needs to be overriden. It looks like if not overriden, fit_transform calls
+	# the mother's method instead of the child one, which is weird.
+	def transform(self,sentences):
+		print('Transforming…')
+		return super(MyVectorizer, self).transform(sentences)
+
+	# Same remark	
+	def fit_transform(self,sentences):
+		sentences = list(sentences)
+		self.fit(sentences)
+		out = self.transform(sentences)
+		print('Vectorized %i sentences for a total of %i words'%out.shape)
+		return out
+
+	# Protect
+	@property
+	def params(self):
+		return self._params
+
+
 
 if __name__=='__main__':
 	args = parser.parse_args()
 	
 	questions = read_file()
-
-	#Need to parse args
-	vectorized, params_tfidf = vectorize(
-		sentences=questions)
+	params_tfidf.update(vars(args))
+	m = MyVectorizer(**params_tfidf)
+	vectorized = m.fit_transform(questions)
+	print(m.params)
