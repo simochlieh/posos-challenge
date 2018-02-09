@@ -14,7 +14,7 @@ from datetime import datetime
 # notes: # regarder le set de médicaments extraits + enlever les trucs chelou
          # regarder qques phrases au hasard sans médicaments et voir pk?
 FR_DICT = Dict("fr_FR")
-FR_DICT_BLACKLIST = ('aspirine', 'carlin')
+FR_DICT_BLACKLIST = ('aspirine', 'carlin', 'morphine')
 DRUG_NAMES_BLACKLIST = ('\n', 'anti', 'santé')
 RCP_ENCODING = 'ISO-8859-1'
 UTF_8 = 'utf-8'
@@ -117,10 +117,10 @@ def extract_drug_names(filename, sep_regex, id_col_idx, name_col_idx):
         for line in tqdm(f, desc='pre-processing drug names', total=NB_DRUGS):
             splits = re.split(sep_regex, line)
             if len(splits) > 3 and splits[name_col_idx] not in DRUG_NAMES_BLACKLIST:
-                names = splits[name_col_idx].split()
+                names = re.split(r'\s|,|-|/|\\|_', splits[name_col_idx])
                 drug_name = None
                 for name in names:
-                    if len(name) > 3 and not FR_DICT.check(name.lower()):
+                    if len(name) > 3 and re.match('([a-zA-Z])+', name) and not FR_DICT.check(name.lower()):
                         drug_name = name
                         break
                 if drug_name:
