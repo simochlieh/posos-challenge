@@ -1,7 +1,4 @@
 import os
-from datetime import datetime
-
-import params
 
 
 def create_dir(path):

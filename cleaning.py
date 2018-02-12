@@ -102,6 +102,7 @@ def extract_drug_names(filename, sep_regex, id_col_idx, name_col_idx):
 def read_raw_input(filename, sep, max_lines):
     """
     Read lines of raw input file
+    :param max_lines: max number of lines to process 
     :param sep: separator character
     :param filename: string
     :return: array of (id, sentence)
