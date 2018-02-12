@@ -1,7 +1,5 @@
 import argparse
-
 import os
-from enchant import Dict
 import nltk
 from nltk.tokenize import word_tokenize
 from nltk.stem.snowball import FrenchStemmer
@@ -9,65 +7,32 @@ from tqdm import tqdm
 import pandas as pnd
 import re
 from unidecode import unidecode
-from datetime import datetime
+
+import params
+import utils
 
 # notes: # regarder le set de médicaments extraits + enlever les trucs chelou
          # regarder qques phrases au hasard sans médicaments et voir pk?
-FR_DICT = Dict("fr_FR")
-FR_DICT_BLACKLIST = ('aspirine', 'carlin', 'morphine')
-DRUG_NAMES_BLACKLIST = ('\n', 'anti', 'santé')
-RCP_ENCODING = 'ISO-8859-1'
-UTF_8 = 'utf-8'
-DRUG_NAME_COL = 'name'
-DRUG_COMPLETE_NAME_COL = 'complete_name'
-DRUG_ID_COL = 'id'
-INPU_DATA_FILENAME = './data/input_train.csv'
-RCP_FILENAME = './data/rcp/CIS.txt'
-SENTENCE_ID = 'id'
-RAW_SENTENCE_COL = 'raw_sentence'
-CORR_LEMM_SENTENCE_COL = 'corr_lemm_sentence'
-DRUG_NAMES_COL = 'drug_names'
-DRUG_IDS_COL = 'drug_ids'
-FORMAT_DATE = '%Y_%m_%dT%H_%M_%S'
-MAX_LINES = 9000
-NB_DRUGS = 30148
 
 
-parser = argparse.ArgumentParser(description='This description is shown when -h or --help are passed as arguments.')
-parser.add_argument('--required_0',
+parser = argparse.ArgumentParser(description="This script runs the cleaning and lemmatization (if enabled) "
+                                             "on the raw data. It outputs a file containing the list of drug names "
+                                             "(if it doesn't exist) under results/drug_names and a file containing the "
+                                             "cleaned and lemmatized data under results/corr_lemm/%label%/input_train")
+parser.add_argument('--label',
+                    default='final',
+                    help="This parameter is used in the output file path of the cleaned and lemmatized data which is "
+                         "results/corr_lemm/%label%/input_train. Default value is 'final'.")
+
+parser.add_argument('-l',
+                    '--lemmatization',
+                    default='true',
+                    help='This flag enables lemmatization.')
+
+parser.add_argument('--max-lines',
                     type=int,
-                    choices=[1, 2, 3],
-                    required=False,
-                    help='This is a required parameter')
-
-parser.add_argument('--multi_integer',
-                    type=int,
-                    default=[1, 2],
-                    nargs='+',
-                    help='This is a multi integer parameter. You have to provide +(at least one) integers.')
-
-parser.add_argument('-f',
-                    '--foo',
-                    action='store_true',
-                    help='This is a flag parameter it can be set or not.')
-
-
-def create_dir(path):
-    directory = os.path.dirname(path)
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-
-def get_drug_names_path():
-    return '%sdrug_names' % (get_results_path())
-
-
-def get_results_path():
-    return 'results/'
-
-
-def get_corr_lemm_path(now=None):
-    return '%scorr_lemm/%s/input_train' % (get_results_path(), datetime.strftime(now, FORMAT_DATE) if now else 'final')
+                    default=10000,
+                    help='This sets the max number of lines to process from the raw input data.')
 
 
 def remove_blacklisted_words_from_dict(blacklist):
@@ -78,7 +43,7 @@ def remove_blacklisted_words_from_dict(blacklist):
     :return: Nothing
     """
     for word in blacklist:
-        FR_DICT.remove(word)
+        params.FR_DICT.remove(word)
 
 
 def requirements():
@@ -98,7 +63,7 @@ def suggest_accented(word):
         if word[i] == 'e':
             for replacement in ('é', 'è', 'ê'):
                 new_word = word[:i] + replacement + word[i+1:]
-                if FR_DICT.check(new_word):
+                if params.FR_DICT.check(new_word):
                     return new_word
     return None
 
@@ -114,13 +79,13 @@ def extract_drug_names(filename, sep_regex, id_col_idx, name_col_idx):
     """
     drug_names = []
     with open(filename, encoding='ISO-8859-1') as f:
-        for line in tqdm(f, desc='pre-processing drug names', total=NB_DRUGS):
+        for line in tqdm(f, desc='pre-processing drug names', total=params.NB_LINES_DRUGS):
             splits = re.split(sep_regex, line)
-            if len(splits) > 3 and splits[name_col_idx] not in DRUG_NAMES_BLACKLIST:
+            if len(splits) > 3 and splits[name_col_idx] not in params.DRUG_NAMES_BLACKLIST:
                 names = re.split(r'\s|,|-|/|\\|_', splits[name_col_idx])
                 drug_name = None
                 for name in names:
-                    if len(name) > 3 and re.match('([a-zA-Z])+', name) and not FR_DICT.check(name.lower()):
+                    if len(name) > 3 and re.match('([a-zA-Z])+', name) and not params.FR_DICT.check(name.lower()):
                         drug_name = name
                         break
                 if drug_name:
@@ -129,50 +94,29 @@ def extract_drug_names(filename, sep_regex, id_col_idx, name_col_idx):
                         drug_name = suggestion
                     drug_names.append((int(splits[id_col_idx]), unidecode(drug_name.lower()), ' '.join(names).lower()))
     drug_names = sorted(list(set(drug_names)), key=lambda x: x[1])
-    df = pnd.DataFrame(drug_names, columns=[DRUG_ID_COL, DRUG_NAME_COL, DRUG_COMPLETE_NAME_COL])
-    df = df.set_index(DRUG_ID_COL)
+    df = pnd.DataFrame(drug_names, columns=[params.DRUG_ID_COL, params.DRUG_NAME_COL, params.DRUG_COMPLETE_NAME_COL])
+    df = df.set_index(params.DRUG_ID_COL)
     return df
 
 
-def read_lines(filename, sep):
+def read_raw_input(filename, sep, max_lines):
     """
-    Read lines of input file
+    Read lines of raw input file
     :param sep: separator character
     :param filename: string
     :return: array of (id, sentence)
     """
     lines = []
-    with open(filename, encoding=UTF_8) as f:
+    with open(filename, encoding=params.UTF_8) as f:
         f.readline()
         i = 0
         for line in f:
             splits = line.strip().split(sep)
             lines.append((int(splits[0]), splits[1]))
-            if i >= MAX_LINES - 1:
+            if i >= max_lines - 1:
                 break
             i += 1
     return lines
-
-
-def binary_search(array, element):
-    """
-    Not used yet
-    :param array:
-    :param element:
-    :return:
-    """
-    if len(array) == 0:
-        return False
-
-    mid = len(array) // 2
-    if element == array[mid]:
-        return True
-    elif element > array[mid] and mid + 1 < len(array):
-        return binary_search(array[mid + 1:], element)
-    elif element < array[mid]:
-        return binary_search(array[:mid], element)
-
-    return False
 
 
 def correct(word):
@@ -181,17 +125,19 @@ def correct(word):
     :param word: word string to correct
     :return: word string correction
     """
-    return FR_DICT.suggest(word)[0]
+    return params.FR_DICT.suggest(word)[0]
 
 
-def correct_and_lemmatize(input_data, drug_names_set):
+def correct_and_lemmatize(input_data, drug_names_set, enable_lemm):
     """
     Correction and Lemmatization on input data
+    :param enable_lemm: if True, enables lemmatization
     :param drug_names_set: set of drug names
     :param input_data: list(id, sentence)
     :return: list(id, list(word))
     """
-    stemmer = FrenchStemmer()
+    if enable_lemm:
+        stemmer = FrenchStemmer()
     for i in tqdm(range(len(input_data)), desc="Correct and Lemmatize"):
         line = input_data[i]
         sentence = line[1]
@@ -210,35 +156,38 @@ def correct_and_lemmatize(input_data, drug_names_set):
                 drug_ids.append(k)
                 drug_names.append(splits[k])
                 continue
-            if not FR_DICT.check(splits[k]):
-                suggestions = FR_DICT.suggest(splits[k])
+            if not params.FR_DICT.check(splits[k]):
+                suggestions = params.FR_DICT.suggest(splits[k])
                 if suggestions:
                     splits[k] = suggestions[0]
-            splits[k] = stemmer.stem(splits[k])
+            if enable_lemm:
+                splits[k] = stemmer.stem(splits[k])
         input_data[i] = (input_data[i][0], sentence,
                          ' '.join(splits), ','.join(map(str, drug_ids)), ','.join(drug_names))
     df = pnd.DataFrame(input_data,
-                       columns=(SENTENCE_ID, RAW_SENTENCE_COL, CORR_LEMM_SENTENCE_COL, DRUG_IDS_COL, DRUG_NAMES_COL))
+                       columns=(params.SENTENCE_ID, params.RAW_SENTENCE_COL,
+                                params.CORR_LEMM_SENTENCE_COL, params.DRUG_IDS_COL, params.DRUG_NAMES_COL))
     return df
 
 
 def main(_args):
-    remove_blacklisted_words_from_dict(FR_DICT_BLACKLIST)
+    print(_args)
+    remove_blacklisted_words_from_dict(params.FR_DICT_BLACKLIST)
     requirements()
 
-    input_data = read_lines(INPU_DATA_FILENAME, sep=';')
+    input_data = read_raw_input(params.INPU_DATA_FILENAME, sep=';', max_lines=int(_args.max_lines))
 
-    drug_names_path = get_drug_names_path()
+    drug_names_path = utils.get_drug_names_path()
     if not os.path.exists(drug_names_path):
-        drug_names_df = extract_drug_names(RCP_FILENAME, sep_regex=r'\t|,', id_col_idx=0, name_col_idx=1)
-        create_dir(drug_names_path)
+        drug_names_df = extract_drug_names(params.RCP_FILENAME, sep_regex=r'\t|,', id_col_idx=0, name_col_idx=1)
+        utils.create_dir(drug_names_path)
         drug_names_df.to_csv(drug_names_path)
     else:
         drug_names_df = pnd.read_csv(drug_names_path)
 
-    drug_names_set = set(drug_names_df[DRUG_NAME_COL])
+    drug_names_set = set(drug_names_df[params.DRUG_NAME_COL])
 
-    corr_lemm_data = correct_and_lemmatize(input_data, drug_names_set)
+    corr_lemm_data = correct_and_lemmatize(input_data, drug_names_set, utils.string_to_bool(_args.lemmatization))
 
     count = 0
 
@@ -249,18 +198,18 @@ def main(_args):
         # print(corr_lemm_data.loc[i, DRUG_NAMES_COL])
         # print()
 
-        if corr_lemm_data.loc[i, DRUG_NAMES_COL]:
+        if corr_lemm_data.loc[i, params.DRUG_NAMES_COL]:
             count += 1
 
-    corr_lemm_path = get_corr_lemm_path()
-    create_dir(corr_lemm_path)
+    corr_lemm_path = utils.get_corr_lemm_path(_args.label)
+    utils.create_dir(corr_lemm_path)
     corr_lemm_data.to_csv(corr_lemm_path)
 
     # To check drug names, will leave it for a while for testing
     # for i in drug_names_df.index:
     #     if 'trim' in drug_names_df.loc[i, DRUG_COMPLETE_NAME_COL]:
     #         print(drug_names_df.loc[i])
-    print(count / MAX_LINES)
+    print("We found drug names in %.2f%% of sentences." % (count / int(_args.max_lines) * 100))
 
 
 if __name__ == '__main__':
