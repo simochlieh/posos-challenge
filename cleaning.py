@@ -31,7 +31,7 @@ parser.add_argument('-l',
 
 parser.add_argument('--max-lines',
                     type=int,
-                    default=10000,
+                    default=10,
                     help='This sets the max number of lines to process from the raw input data.')
 
 
@@ -102,7 +102,7 @@ def extract_drug_names(filename, sep_regex, id_col_idx, name_col_idx):
 def read_raw_input(filename, sep, max_lines):
     """
     Read lines of raw input file
-    :param max_lines: max number of lines to process 
+    :param max_lines: max number of lines to process
     :param sep: separator character
     :param filename: string
     :return: array of (id, sentence)
@@ -151,6 +151,7 @@ def correct_and_lemmatize(input_data, drug_names_set, enable_lemm):
                 continue
             if "'" in splits[k]:
                 word = splits[k].split("'")[1]
+                splits[k] = word
             else:
                 word = splits[k]
             if unidecode(word) in drug_names_set:

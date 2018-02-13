@@ -1,4 +1,4 @@
-## This is the tf-idf script for the preprocessing step.
+# This is the tf-idf script for the preprocessing step.
 # it should be tested in the queue of the cleansing step.
 # The read_file func is pointless as it wont be used in real framework.
 # The sklearn tfidfvectorizer class was subclassed in order to integrate
@@ -6,92 +6,83 @@
 # This object stores the parameters it was fed with, even if those parameters are accessible
 # Through the params.py file.
 
-#Throws a weird deprecation error btw
+# Throws a weird deprecation error btw
 
-#TF-file for preprocessing step
+# TF-file for preprocessing step
 from sklearn.feature_extraction.text import TfidfVectorizer
 import argparse
-import re
-from params import params_tfidf
-import warnings
-warnings.simplefilter(action='ignore', category=FutureWarning)
+import pandas as pnd
+from copy import deepcopy
+from scipy import sparse
+import os
 
-parser = argparse.ArgumentParser(description='This description is shown when -h or --help are passed as arguments.')
+import params
+import utils
 
-parser.add_argument('--min_freq',
+parser = argparse.ArgumentParser(description='This script takes as an input the corrected and stemmed data '
+                                             'after adding drug information, and it outputs a vectorized form of '
+                                             'the input sentences.')
+
+parser.add_argument('--max-features',
+                    type=int,
+                    default=None,
+                    help='This is the maximum number of features (vocabulary words) for the Tf-idf vectorizer')
+
+parser.add_argument('--max-df',
                     type=float,
-                    required=False,
-                    default=1.,
-                    help='This is the minimum #appearances for a word to reach in order to be maintained')
+                    default=0.1,
+                    help='This is the maximum document frequency considered. '
+                         'Any word having a higher frequency is not taken into account')
+
+parser.add_argument('--label',
+                    default='final',
+                    help="this parameter is used in the input and output file path.")
 
 
-# Just reads the csv file by getting rid of the header.
-# For speed and memory matter, it yields a generator of sentences.
-# This is just intended at my own development testing for the below vectorizer
-def read_file(path='/Users/remydubois/Desktop/posos/input_test.csv'):
-	#Open and get rid of the header
-	with open(path,'r') as f:
-		questions = f.read().splitlines()[1:]
-		#Split and leave the question id for now
-		questions = map(lambda s:s.split(';')[1], questions)
-		#Filter punctuation
-		questions = map(lambda s:re.sub('[-?\']',' ',s), questions)
-		#Strip spaces
-		questions = map(lambda s:s.strip(), questions)
-
-	return questions
-
-
-#Needed to build a class for better integration
 class MyVectorizer(TfidfVectorizer):
-	
-	# In practice, 
-	# all the sklearn parameters will be fed into this __init__ from the params.py file.
-	def __init__(self, forbidden_words=[], magic_word='',**kwargs):
-		self.forbidden_words = forbidden_words
-		self.magic_word = magic_word
+    # In practice,
+    # all the sklearn parameters will be fed into this __init__ from the params.py file.
+    def __init__(self, **kwargs):
+        # Get params
+        self.parameters = deepcopy(params.params_tfidf)
+        self.parameters.update(kwargs)
+        keys = list(self.parameters.keys())
 
-		#Get params
-		params = {'forbidden_words':forbidden_words,'magic_word':magic_word}
-		params.update(kwargs)
-		self._params = params
+        for key in keys:
+            if key not in params.params_tfidf:
+                self.parameters.pop(key, None)
+        # Init mother
+        super(MyVectorizer, self).__init__(**self.parameters)
 
-		#Init mother
-		super(MyVectorizer, self).__init__(self, params)
+    def fit(self, sentences, **kwargs):
+        print('Fitting…')
+        super(MyVectorizer, self).fit(sentences)
 
-	def fit(self, sentences):
-		#Filter words
-		if not self.forbidden_words==[]:
-			sentences = map(lambda s:' '.join([w if w not in self.forbidden_words else self.magic_word for w in s.split()]), sentences)
-		print('Fitting…')
-		super(MyVectorizer, self).fit(sentences)
+    def transform(self, sentences, **kwargs):
+        print('Transforming…')
+        return super(MyVectorizer, self).transform(sentences)
 
-	# Don't know why it needs to be overriden. It looks like if not overriden, fit_transform calls
-	# the mother's method instead of the child one, which is weird.
-	def transform(self,sentences):
-		print('Transforming…')
-		return super(MyVectorizer, self).transform(sentences)
+    def fit_transform(self, sentences, **kwargs):
+        print('Fitting and Transforming...')
+        return super(MyVectorizer, self).fit_transform(sentences)
 
-	# Same remark	
-	def fit_transform(self,sentences):
-		sentences = list(sentences)
-		self.fit(sentences)
-		out = self.transform(sentences)
-		print('Vectorized %i sentences for a total of %i words'%out.shape)
-		return out
-
-	# Protect
-	@property
-	def params(self):
-		return self._params
+    def get_params(self, deep=True):
+        return self.parameters
 
 
+if __name__ == '__main__':
+    args = parser.parse_args()
 
-if __name__=='__main__':
-	args = parser.parse_args()
-	
-	questions = read_file()
-	params_tfidf.update(vars(args))
-	m = MyVectorizer(**params_tfidf)
-	vectorized = m.fit_transform(questions)
-	print(m.params)
+    questions = pnd.read_csv(utils.get_corr_lemm_path(args.label))[params.CORR_LEMM_SENTENCE_COL]
+
+    m = MyVectorizer(**vars(args))
+    vectorized = m.fit_transform(questions)
+
+    print(vectorized.shape)
+    print(m.get_params())
+    print(m.stop_words_)
+
+    output_path = utils.get_vectorized_data_path(args.label)
+    if not os.path.exists(output_path):
+        utils.create_dir(output_path)
+    sparse.save_npz(output_path, vectorized)

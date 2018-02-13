@@ -46,3 +46,7 @@ def string_to_bool(string):
         return True
     else:
         return False
+
+
+def get_vectorized_data_path(label):
+    return '%svectorized/%s/input_train' % (get_results_path(), label)

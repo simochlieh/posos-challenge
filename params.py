@@ -4,8 +4,7 @@
 # Proceed to various experiments
 
 from enchant import Dict
-
-
+import numpy as np
 #################################################
 # TF-IDF parameters
 #################################################
@@ -20,20 +19,19 @@ params_tfidf = {
     'tokenizer': None,
     'analyzer': "word",
     'stop_words': None,
-    # 'token_pattern':"(?u)\b\w\w+\b",
+    'token_pattern': r"(?u)\b\w\w+\b",
     'ngram_range': (1, 1),
     'max_df': 1.0,
     'min_df': 1,
     'max_features': None,
     'vocabulary': None,
     'binary': False,
-    # dtype:<class "numpy.int64">,
+    'dtype': np.int64,
     'norm': "l2",
     'use_idf': True,
     'smooth_idf': True,
     'sublinear_tf': False,
-    'forbidden_words': ['autisme'],
-    'magic_word': ''}
+}
 
 #################################################
 # Cleaning and lemmatization parameters
