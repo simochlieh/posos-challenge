@@ -51,12 +51,12 @@ class MyVectorizer(TfidfVectorizer):
 	
 	# In practice, 
 	# all the sklearn parameters will be fed into this __init__ from the params.py file.
-	def __init__(self, forbidden_words=[], magic_word='',**kwargs):
+	def __init__(self, mapping = None,**kwargs):
 		self.forbidden_words = forbidden_words
 		self.magic_word = magic_word
 
 		#Get params
-		params = {'forbidden_words':forbidden_words,'magic_word':magic_word}
+		params = {}
 		params.update(kwargs)
 		self._params = params
 
@@ -66,7 +66,7 @@ class MyVectorizer(TfidfVectorizer):
 	def fit(self, sentences, y=None):
 		#Filter words
 		if not self.forbidden_words==[]:
-			sentences = map(lambda s:' '.join([w if w not in self.forbidden_words else self.magic_word for w in s.split()]), sentences)
+			sentences = map(lambda s:' '.join([w if w not in mapping.keys() else mapping[w] for w in s.split()]), sentences)
 		print('Fitting…')
 		super(MyVectorizer, self).fit(sentences, y=y)
 
