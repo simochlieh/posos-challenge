@@ -6,8 +6,6 @@
 # This object stores the parameters it was fed with, even if those parameters are accessible
 # Through the params.py file.
 
-# Throws a weird deprecation error btw
-
 # TF-file for preprocessing step
 from sklearn.feature_extraction.text import TfidfVectorizer
 import argparse
