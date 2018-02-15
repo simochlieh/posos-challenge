@@ -6,18 +6,26 @@ import os
 from bs4 import BeautifulSoup
 import numpy as np
 
-from sklearn.cluster import KMeans, SpectralClustering, AgglomerativeClustering
-from sklearn.metrics import silhouette_samples, silhouette_score, calinski_harabaz_score
-from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.cluster import KMeans
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.preprocessing import scale
-from functools import partial
 import re
 from unidecode import unidecode
 import sys
+import warnings
+import argparse
+from sklearn.pipeline import Pipeline
+
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 
 FORBIDDEN_INDICATIONS = [" Pas d'indication thérapeutique "]
+
+parser = argparse.ArgumentParser(description="This script runs loads the description db (if needed) "
+                                            "and clusterise drugs based on their description, "
+                                            "finally replaces them with tokens based on their cluster")
+parser.add_argument('--n_clusters',
+                    default=20,
+                    help="This parameter is used to choose the number of clusters in which to classify drugs.")
 
 
 # Requesting open-medicaments API to get therapeutic indications for each drug
@@ -31,74 +39,13 @@ def grab_indications(ide):
     except KeyError:
         indication = 'NF'
 
-    indication = re.sub(FORBIDDEN_INDICATIONS[0] + "|" + FORBIDDEN_INDICATIONS[1], 'NF', indication)
+    indication = re.sub(FORBIDDEN_INDICATIONS[0], 'NF', indication)
     indication = re.sub("Plus d'information en cliquant ici", '', indication)
     indication = re.sub(
         ' Vous trouverez les indications thérapeutiques de ce médicament dans le paragraphe 4.1 du RCP ou dans le paragraphe 1 de la notice. Ces documents sont disponibles en cliquant ici ',
-        'Ext', indication)
+        'NF', indication)
 
     return indication
-
-
-###########################################
-# Raises approx:
-#  16066 "NF" i.e. drug id not in open-medicaments database
-#  652 " Pas d'indication therapeutique "
-#  1217 " Vous trouverez les indications therapeutiques de ce medicament dans le paragraphe 4.1 du RCP ou dans le paragraphe 1 de la notice. Ces documents sont disponibles en cliquant ici "
-# Last one could lead to pdf scraping if really necessary
-###########################################
-
-class MyKMeans(KMeans):
-
-    def __init__(self, **kwargs):
-        super(MyKMeans, self).__init__(self, **kwargs)
-
-    def __fit(self, X, y=None):
-        super(MyKMeans, self).fit(X=X,y=None)
-
-
-
-class Tokenizer(TfidfVectorizer, MyKMeans):
-
-    def __init__(self, drug_descriptions='./results/indications', **kwargs):
-        self._descriptions = pandas.read_csv(drug_descriptions)
-
-        MyKMeans.__init__(self)
-        TfidfVectorizer.__init__(self)
-
-    def fit(self, df, y=None):
-        # df is here the full dataframe with sentences, drugs_names etc
-        print('fitting')
-        #print(df)
-        try:
-            if set(df.drug_names.unique()) < set(self._descriptions.drug_names):
-                raise Exception('Some drugs are not in the description file.')
-        except ValueError:
-            print('Dimensions mismatch, probably the description file is not the right one.')
-
-        TfidfVectorizer.fit(self, raw_documents=self._descriptions.descriptions, y=y)
-
-    # SpectralClustering.fit(vectorized, **kwargs)
-
-    def transform(self, df, **kwargs):
-        vectorized = TfidfVectorizer.transform(self, raw_documents=self._descriptions.descriptions)
-        print('vectorized')
-        # SpectralClustering.fit(self,X=vectorized, **kwargs)
-        # print('sp fit')
-        print(self.n_clusters)
-        MyKMeans.fit(self, X=vectorized)
-
-        labels = MyKMeans.predict(self, X=vectorized)
-
-        tokens = list(map(lambda l: 'TOKEN_' + str(l), labels))
-
-        mapping = dict(zip(self._descriptions.drugs_names, tokens))
-
-        sentences = df.apply(
-            lambda row: re.sub(row['drug_names'], mapping[row['drug_names']], row['corr_lemm_sentence']))
-
-        return sentences
-
 
 def complete(df):
     print('Completing database…')
@@ -111,6 +58,7 @@ def complete(df):
         dico[n] = list(drugs_df[drugs_df.drug_names == n].drug_ids)
 
     remaining = dico.keys()  # list(filter(lambda s: s=='NF', dico.keys()))
+    
     for n in tqdm.tqdm(remaining):
         indication = 'NF'
         i = 0
@@ -137,122 +85,101 @@ def complete(df):
 
     return frame
 
+# As of now: this object does not handle the 'NF', however they are rejected by the tfidf thanks to 
+# the parameter max_df. It means that drugs with no descriptions ('NF' for 'Not Found') have zero-coordinates
+# in the frequency space.
+# It can be fully inegrated in sklearn's pipeline (see main for test), but does not handle properly (at
+# least not tested) gridsearch as parameters are not handled properly (**kwargs might raise errors due to
+# dirty inheritance).
+class Tokenizer(TfidfVectorizer, KMeans):
 
-def pick_n_clusters(indications, range_n_clusters=[2, 4, 8, 6, 10], algo=SpectralClustering):
-    print('Iterating over ' + str(range_n_clusters))
-    if type(algo) == str:
-        algo = getattr(sklearn.cluster, algo)
+    def __init__(self, drug_descriptions='./results/indications', n_clusters = 20, **kwargs):
+        self._descriptions = pandas.read_csv(drug_descriptions)
 
-    cal_scores = []
-    silh_scores = []
-    for n_clusters in tqdm.tqdm(range_n_clusters):
+        KMeans.__init__(self, n_clusters=n_clusters)
+        TfidfVectorizer.__init__(self, max_df = 0.2)
+
+    def fit(self, df, y=None):
+        # df is here the full dataframe with sentences, drugs_names etc
         try:
-            clusterer = algo(n_clusters,
-                             affinity='precomputed')  # algo(n_clusters=n_clusters, affinity=metric, linkage=linkage)
-        except:
-            clusterer = algo(n_clusters)
-        aff = cosine_similarity(indications)
-        labels = clusterer.fit_predict(aff)
+            if set(df.drug_names.unique()) < set(self._descriptions.drug_names):
+                raise Exception('Some drugs are not in the description file.')
+        except ValueError:
+            print('Dimensions mismatch, probably the description file is not the right one.')
 
-        cal_scores.append(round(calinski_harabaz_score(indications, labels), 1))
-        silh_scores.append(round(silhouette_score(indications, labels, metric='cosine'), 2))
+        print('Fitting…')
+        TfidfVectorizer.fit(self, raw_documents=self._descriptions.descriptions, y=y)
 
-    print('Algorithm: ' + str(algo))
-    print('cal_scores: ' + str(cal_scores))
-    print('silh_scores: ' + str(silh_scores))
+    def transform(self, df, **kwargs):
+        
+        vectorized = TfidfVectorizer.transform(self, raw_documents=self._descriptions.descriptions)
+        
+        KMeans.fit(self, X=vectorized)
 
-    f, ax = plt.subplots()
-    ax.plot(list(range_n_clusters), silh_scores, color='r')
-    ax2 = ax.twinx()
-    ax2.plot(list(range_n_clusters), cal_scores, color='b')
-    f.show()
+        labels = KMeans.predict(self, X=vectorized)
+
+        print('Labelled…')
+
+        tokens = list(map(lambda l: 'TOKEN_' + str(l), labels))
+
+        mapping = dict(zip(self._descriptions.drug_names, tokens))
+
+        print('Mapped…')
+
+        def replace_in_sentence(row, mapping=mapping):
+            try:
+                positions = row['drug_ids'].split(',')
+            except AttributeError:
+                positions = []
+
+            positions = list(map(int, positions))
+
+            try:
+                drug_names = row['drug_names'].split(',')
+            except AttributeError:
+                drug_names = []
+            
+            drug_tokens = [mapping.get(unidecode(n)) for n in drug_names]
+
+            sentence = row['corr_lemm_sentence'].strip().split(' ')
+            
+            tokenized_sentence = ' '.join(map(lambda t:t[1] if t[0] not in positions else drug_tokens.pop(0), enumerate(sentence)))
+            return tokenized_sentence
+
+        sentences = []
+        for _,row in tqdm.tqdm(df.iterrows()):
+            c = replace_in_sentence(row)
+            sentences.append(c)
+
+        #Delete description attribute for memory consumption
+        del self._descriptions
+
+        return sentences
+
+    def fit_transform(self,df, y=None):
+        self.fit(df)
+        return self.transform(df)
 
 
-def filter_indications(serie):
-    serie = serie.apply(lambda x: 'NF' if x in FORBIDDEN_INDICATIONS else x)
-    serie = serie.apply(lambda s: re.sub("Plus d'information en cliquant ici", '', s))
-    return serie
+def main(_args):
+    input_train = pandas.read_csv(
+        './results/corr_lemm/final/input_train')
 
+    _ = complete(input_train)
 
-def assess_DBSCAN(X, sup=20):
-    print('Assesing DBSCAN with 1/%ilong step' % (sup))
-    clusters = []
-    s_scores = []
-    c_scores = []
-    for i in tqdm.tqdm(range(1, sup)):
-        algo = DBSCAN(eps=i / sup, metric='cosine')
-        labels = algo.fit_predict(X)
-        try:
-            clusters.append(len(np.unique(algo.labels_)))
-            s_scores.append(round(silhouette_score(X, labels, metric='cosine'), 2))
-            c_scores.append(calinski_harabaz_score(X, labels))
-        except:
-            pass
+    #toke = Tokenizer(**vars(_args))
 
-    f, ax = plt.subplots()
-    ax.plot(clusters, s_scores, color='r')
-    ax.set_ylabel('Silhouette_score', color='r')
-    ax2 = ax.twinx()
-    ax2.plot(clusters, c_scores, color='b')
-    ax1.set_ylabel('C_score', color='b')
-    f.show()
+    #this is just a test for integration.
+    #pca = TfidfVectorizer()
 
-    return np.vtack((cluster, s_scores, c_scores)).transpose()
+    #pipe = Pipeline([('t',toke),('pca',pca)])
 
-
-def produce_mapping(s):
-    serie = filter_indications(s)
-    serie = serie[serie != 'NF']
-
-    algo = SpectralClustering(n_clusters=60, affinity='precomputed')
-
-    vecto = TfidfVectorizer(max_df=0.3, sublinear_tf=True)  # hand tested
-    vectorized = vecto.fit_transform(serie).toarray()
-    sim = cosine_similarity(vectori)
-    labels = algo.fit_predict(sim)
-    mapping = {}
-    for (m, i) in tqdm.tqdm(enumerate(serie)):
-        mapping[i] = 'TOKEN_' + str(labels[m])
-    mapping['NF'] = 'TOKEN_NF'
-
-    return mapping
-
+    #pipe.fit_transform(input_train)
+    
 
 if __name__ == '__main__':
-    # drugs = pandas.read_csv('/Users/remydubois/Documents/perso/repos/rd_repos/posos-challenge/results/drug_names')
-    # drugs = complete_df(drugs)
-    input_train = pandas.read_csv(
-        '/Users/remydubois/Documents/perso/repos/rd_repos/posos-challenge/results/corr_lemm/final/input_train')
-    toke = Tokenizer()
-    toke.fit(df=input_train)
-    # print('fit')
-    sentences = toke.transform(df=input_train)
-    # frame =  complete(train)
 
-    """
-    # Take care of deduplicated indications:
-    # Replace 'Pas d'inidcation…' by 'NF'
-    to_replace = [" Pas d'indication thérapeutique ", ' Vous trouverez les indications thérapeutiques de ce médicament dans le paragraphe 4.1 du RCP ou dans le paragraphe 1 de la notice. Ces documents sont disponibles en cliquant ici ']
-    drugs.indicationsTherapeutiques = drugs.indicationsTherapeutiques.replace(to_replace=to_replace, value='NF')
-    drugs['count_per_short_name'] = drugs.groupby('drug_names').indicationsTherapeutiques.transform(lambda x:len(np.unique(x)))
-    deduplicated = drugs[drugs.count_per_short_name>1]
-    duplicated_drugs = deduplicated.drug_names.drop_duplicates()
+    args = parser.parse_args()
 
-    #Now, if a drug returns an indication for some time but none for other, we replace 'NF' by the indication:
-    drugs = drugs.apply(lambda row: ro, axis=0)
+    main(args)
 
-    #train_data = pandas.merge(drugs, train, on=['drug_ids'])
-
-    #mapping = produce_mapping(indications)
-
-    #mapping = produce_mapping(drugs_indic.indicationsTherapeutiques)
-
-    #indications = drugs_indic['indicationsTherapeutiques']
-
-    #vectorizer = TfidfVectorizer()
-    #vectorized = vectorizer.fit_transform(indications)
-
-    #n_clusters_KMeans = pick_n_clusters(indications, algo=KMeans)
-    #n_clusters_SpectralClustering = pick_n_clusters(indications, algo=SpectralClustering)
-    #n_clusters_AgglomerativeClustering = pick_n_clusters(indications, algo=AgglomerativeClustering)
-    """
