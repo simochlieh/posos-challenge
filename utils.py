@@ -50,3 +50,19 @@ def string_to_bool(string):
 
 def get_vectorized_data_path(label):
     return '%svectorized/%s/input_train' % (get_results_path(), label)
+
+
+def get_stop_words_path(label):
+    return '%svectorized/%s/stop_words' % (get_results_path(), label)
+
+
+def get_vectorizer_params_path(label):
+    return '%svectorized/%s/params' % (get_results_path(), label)
+
+
+def get_labels_path():
+    return './data/y_train.csv'
+
+
+def get_tokenized_drugs_path(label):
+    return '%sdrug_tokenizer/%s/input_train' % (get_results_path(), label)

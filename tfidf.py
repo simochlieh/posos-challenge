@@ -13,6 +13,7 @@ import pandas as pnd
 from copy import deepcopy
 from scipy import sparse
 import os
+import json
 
 import params
 import utils
@@ -64,23 +65,41 @@ class MyVectorizer(TfidfVectorizer):
         print('Fitting and Transforming...')
         return super(MyVectorizer, self).fit_transform(sentences)
 
-    def get_params(self, deep=True):
-        return self.parameters
+
+def read_lines(filepath):
+    lines = []
+    with open(filepath, encoding=params.UTF_8) as f:
+        for line in f:
+            lines.append(line.strip())
+
+    return lines
 
 
-if __name__ == '__main__':
-    args = parser.parse_args()
-
-    questions = pnd.read_csv(utils.get_corr_lemm_path(args.label))[params.CORR_LEMM_SENTENCE_COL]
+def main(args):
+    questions = read_lines(utils.get_tokenized_drugs_path(args.label))
 
     m = MyVectorizer(**vars(args))
     vectorized = m.fit_transform(questions)
 
-    print(vectorized.shape)
-    print(m.get_params())
-    print(m.stop_words_)
+    params_path = utils.get_vectorizer_params_path(args.label)
+    utils.create_dir(params_path)
+    with open(params_path, 'w') as out:
+        # skipping keys that are not json serializable
+        json.dump(m.parameters, out, skipkeys=True)
+
+    stop_words_path = utils.get_stop_words_path(args.label)
+    utils.create_dir(stop_words_path)
+    with open(stop_words_path, 'w', encoding=params.UTF_8) as out:
+        for stop_words in m.stop_words_:
+            out.write(stop_words + '\n')
 
     output_path = utils.get_vectorized_data_path(args.label)
     if not os.path.exists(output_path):
         utils.create_dir(output_path)
     sparse.save_npz(output_path, vectorized)
+
+
+if __name__ == '__main__':
+    args_ = parser.parse_args()
+    print(args_)
+    main(args_)

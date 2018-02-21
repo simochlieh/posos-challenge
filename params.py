@@ -26,7 +26,6 @@ params_tfidf = {
     'max_features': None,
     'vocabulary': None,
     'binary': False,
-    'dtype': np.int64,
     'norm': "l2",
     'use_idf': True,
     'smooth_idf': True,
