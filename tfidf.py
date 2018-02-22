@@ -98,8 +98,3 @@ def main(args):
         utils.create_dir(output_path)
     sparse.save_npz(output_path, vectorized)
 
-
-if __name__ == '__main__':
-    args_ = parser.parse_args()
-    print(args_)
-    main(args_)
