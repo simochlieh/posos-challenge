@@ -53,17 +53,17 @@ class MyVectorizer(TfidfVectorizer):
         # Init mother
         super(MyVectorizer, self).__init__(**self.parameters)
 
-    def fit(self, sentences, **kwargs):
+    def fit(self, sentences, y=None, **kwargs):
         print('Fitting…')
         super(MyVectorizer, self).fit(sentences)
 
     def transform(self, sentences, **kwargs):
         print('Transforming…')
-        return super(MyVectorizer, self).transform(sentences)
+        return super(MyVectorizer, self).transform(sentences).toarray()
 
-    def fit_transform(self, sentences, **kwargs):
+    def fit_transform(self, sentences, y=None, **kwargs):
         print('Fitting and Transforming...')
-        return super(MyVectorizer, self).fit_transform(sentences)
+        return super(MyVectorizer, self).fit_transform(sentences, y=y).toarray()
 
 
 def read_lines(filepath):

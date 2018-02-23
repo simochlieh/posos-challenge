@@ -1,4 +1,7 @@
 import os
+from datetime import datetime
+from sklearn.model_selection import GridSearchCV
+import pickle
 
 
 def create_dir(path):
@@ -66,3 +69,22 @@ def get_labels_path():
 
 def get_tokenized_drugs_path(label):
     return '%sdrug_tokenizer/%s/input_train' % (get_results_path(), label)
+
+
+def extend_class(cls):
+    return lambda f: (setattr(cls, f.__name__, f) or f)
+
+
+@extend_class(GridSearchCV)
+def write_results(self):
+    timestamp = str(datetime.now()).split('.')[0].replace(':', '.').replace(' ', '_')
+    os.mkdir('./results/%s' % timestamp)
+
+    with open('./results/%s/info.txt' % timestamp, 'w+') as f:
+        f.write('##############################################')
+        f.write('\nBest accuracy: %f' % (self.best_score_))
+        f.write('\nobtained with:\n' + str(self.best_params_))
+        f.write('\n\nAmong a 3 fold CV test on those params:\n' + str(self.param_grid))
+
+    with open('./results/%s/model.pkl' % timestamp, 'wb+') as f:
+        pickle.dump(self.best_estimator_, f)

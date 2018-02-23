@@ -22,21 +22,11 @@ from sklearn.pipeline import Pipeline
 import io
 from PyPDF2 import PdfFileReader
 from pathlib2 import Path
-from sklearn.base import BaseEstimator
-from pdfquery import PDFQuery
 import time
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 FORBIDDEN_INDICATIONS = [" Pas d'indication thérapeutique "]
-
-parser = argparse.ArgumentParser(description="This script runs loads the description db (if needed) "
-                                             "and clusterise drugs based on their description, "
-                                             "finally replaces them with tokens based on their cluster")
-parser.add_argument('--n_clusters',
-                    default=20,
-                    help="This parameter is used to choose the number of clusters in which to classify drugs.")
-
 
 def scrape_pdf(url):
     # As the link provided in open-medicaments redirects toward the EU drug databases, the javascript needs to be
@@ -166,20 +156,17 @@ def complete(df):
 # As of now: this object does not handle the 'NF', however they are rejected by the tfidf thanks to
 # the parameter max_df. It means that drugs with no descriptions ('NF' for 'Not Found') have zero-coordinates
 # in the frequency space.
-# It can be fully integrated in sklearn's pipeline (see main for test), but does not handle properly (at
-# least not tested) gridsearch as parameters are not handled properly (**kwargs might raise errors due to
-# dirty inheritance).
-class Tokenizer(TfidfVectorizer, KMeans, BaseEstimator):
+# It can be fully integrated in sklearn's pipeline (see main for test), GridSearchCV is functional and works
+# properly.
 
-    def __init__(self, n_clusters=1, **kwargs):
+class Tokenizer(TfidfVectorizer, KMeans):
+
+    def __init__(self, verbose=0):
         self._descriptions = pandas.read_csv('./results/indications')
 
-        cluster_params = {k:kwargs[k] for k in kwargs if k in KMeans.__init__.__code__.co_varnames}
-        tf_params = {k:kwargs[k] for k in kwargs if k in TfidfVectorizer.__init__.__code__.co_varnames}
-
-        KMeans.__init__(self, n_clusters, **cluster_params)
-        TfidfVectorizer.__init__(self, **tf_params)
-        BaseEstimator.__init__(self)
+        KMeans.__init__(self)
+        TfidfVectorizer.__init__(self)
+        self._verbose = verbose
 
     def fit(self, df, y=None):
         # df is here the full dataframe with sentences, drugs_names etc
@@ -189,7 +176,8 @@ class Tokenizer(TfidfVectorizer, KMeans, BaseEstimator):
         except ValueError:
             print('Dimensions mismatch, probably the description file is not the right one.')
 
-        print('Fitting…')
+        if self._verbose>0:
+            print('Fitting tokenizer…')
         TfidfVectorizer.fit(self, raw_documents=self._descriptions.descriptions, y=y)
 
     def transform(self, df, **kwargs):
@@ -200,13 +188,15 @@ class Tokenizer(TfidfVectorizer, KMeans, BaseEstimator):
 
         labels = KMeans.predict(self, X=vectorized)
 
-        print('Labelled…')
+        if self._verbose > 0:
+            print('Labelling drugs…')
 
         tokens = list(map(lambda l: 'TOKEN_' + str(l), labels))
 
         mapping = dict(zip(self._descriptions.drug_names, tokens))
 
-        print('Mapped…')
+        if self._verbose > 0:
+            print('Drugs mapped…')
 
         def replace_in_sentence(row, mapping=mapping):
             try:
@@ -230,7 +220,8 @@ class Tokenizer(TfidfVectorizer, KMeans, BaseEstimator):
             return tokenized_sentence
 
         sentences = []
-        for _, row in tqdm.tqdm(df.iterrows()):
+        loop = df.iterrows() if self._verbose == 0 else tqdm.tqdm(df.iterrows())
+        for _, row in loop:
             c = replace_in_sentence(row)
             sentences.append(c)
 
@@ -240,37 +231,12 @@ class Tokenizer(TfidfVectorizer, KMeans, BaseEstimator):
         return sentences
 
     def fit_transform(self, df, y=None):
-        self.fit(df)
+        self.fit(df, y=y)
         return self.transform(df)
 
+    def set_params(self, **kwargs):
+        cluster_params = {k: kwargs[k] for k in kwargs if k in KMeans.__init__.__code__.co_varnames}
+        tf_params = {k: kwargs[k] for k in kwargs if k in TfidfVectorizer.__init__.__code__.co_varnames}
 
-def main(_args):
-    input_train = pandas.read_csv(
-        './results/corr_lemm/final/input_train')
-
-    y_train = list(pandas.read_csv('/Users/remydubois/Desktop/y_train.csv', sep=';').intention)
-
-    # _ = complete(input_train)
-
-    toke = Tokenizer()
-
-    tf = TfidfVectorizer()
-
-    clf = GradientBoostingClassifier(verbose=0,n_estimators=5)
-
-    cachedir = mkdtemp()
-    memory = Memory(cachedir=cachedir, verbose=10)
-    pipe = Pipeline([('t',toke),('tf',tf), ('clf',clf)], memory=memory)
-
-    grid_params = [{'t__n_clusters':[20, 10, 1]}]
-
-    grid = GridSearchCV(pipe, n_jobs=3, param_grid=grid_params)
-
-    grid.fit(input_train,y_train)
-    print(grid.best_score_)
-    print(grid.best_params_)
-
-if __name__ == '__main__':
-    args = parser.parse_args()
-
-    main(args)
+        KMeans.set_params(cluster_params)
+        TfidfVectorizer.set_params(tf_params)

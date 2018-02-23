@@ -1,58 +1,74 @@
-#Dimensionality reduction file
+# Main for experiments
 
-from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
+from embedding import Tokenizer
+from tfidf import MyVectorizer
+
 from sklearn.pipeline import Pipeline
-from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.linear_model import SGDClassifier
-from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
-from sklearn.model_selection import cross_val_score, GridSearchCV
-from sklearn.metrics import roc_auc_score
-from tfidf import *
-from params import *
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.decomposition import PCA
+from sklearn.feature_extraction.text import TfidfVectorizer
 from tempfile import mkdtemp
-from shutil import rmtree, copyfile
+from shutil import rmtree
 from sklearn.externals.joblib import Memory
-from datetime import datetime
-import os
 
-if __name__=='__main__':
+import argparse
+import pandas
 
-	x_train, y_train = read_file()
+from utils import *
 
-	vectorizer = MyVectorizer(**params_tfidf)
-	pca = PCA(**params_PCA) #From vizu of pca.pkl performed on full data
-	clf = DecisionTreeClassifier() #Just for default
-	
-	cachedir = mkdtemp()
-	memory = Memory(cachedir=cachedir, verbose=10)
-	pipe = Pipeline(steps=[('tfidf',vectorizer),('pca',pca),('classifier',clf)], memory = memory)
+parser = argparse.ArgumentParser(description="This script runs the main experiments.")
 
-	params_grid = [
-	{
-		'classifier':[
-			DecisionTreeClassifier(), 
-			AdaBoostClassifier(n_estimators=150), 
-			GradientBoostingClassifier(n_estimators=150, learning_rate=0.08)]
-	},
-	{
-		'classifier':[SGDClassifier()], #faster than SVC
-		'classifier__C':[0.8,1.]
-	}
-	]
+parser.add_argument('--n_clusters',
+                    default=20,
+                    help="This parameter is used to choose the number of clusters in which to classify drugs.")
 
-	grid = GridSearchCV(pipe, cv=3, n_jobs=3, param_grid=params_grid, verbose=1)
+parser.add_argument('--max_df',
+                    default=0.3,
+                    help="This parameter is used to choose the maximum frequency of words in "
+                         "the drug tokenization process.")
 
-	grid.fit(x_train, y_train)
 
-	#Now write results down.
-	timestamp = str(datetime.now()).split('.')[0]
-	os.mkdir('./results/%s'%(timestamp))
-	with open('./results/'+timestamp+'/info.txt','w+') as f:
-		f.write('##############################################')
-		f.write('\nBest accuracy: %f'%(grid.best_score_))
-		f.write('\nobtained with:\n'+str(grid.best_params_))
-		f.write('\n\nAmong a 3 fold CV test on those params:\n'+str(grid.param_grid))
-		f.write('\n\nPreprocessing params in params.py file')
-	copyfile('params.py','./results/'+timestamp+'/params.txt')
+def main(_args):
+    # read data in
+    input_train = pandas.read_csv(
+        './results/corr_lemm/final/input_train')
+    y_train = list(pandas.read_csv('/Users/remydubois/Desktop/posos/y_train.csv', sep=';').intention)
+
+    # Bring objects in
+    toke = Tokenizer()
+    vecto = MyVectorizer()
+    pca = PCA()
+    clf = GradientBoostingClassifier(verbose=0, n_estimators=1)
+
+    # Stack it all in a pipeline
+    cachedir = mkdtemp()
+    memory = Memory(cachedir=cachedir, verbose=0)
+    pipe = Pipeline(steps=
+                    [('toke', toke),
+                     ('vecto', vecto),
+                     ('pca', pca),
+                     ('clf', clf)
+                     ],
+                    memory=memory
+                    )
+
+    # Build a Grid parameters, then the GSCV object
+    params_grid = [
+        # {'toke__n_clusters': [1, 5, 10]},
+        # {'toke__max_df': [0.3, 0.1]},
+        # {'vecto__max_df': [0.3, 0.1]},
+        {'pca__n_components': [1000, None]},
+        {'clf__n_estimators': [1]}
+    ]
+
+    GSCV = GridSearchCV(pipe, n_jobs=3, param_grid=params_grid, verbose=3)
+
+    # Now fit
+    GSCV.fit(input_train, y_train)
+    GSCV.write_results()
+    rmtree(cachedir)
+
+
+if __name__ == '__main__':
+    args = parser.parse_args()
+    main(args)
