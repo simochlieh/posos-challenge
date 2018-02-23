@@ -29,7 +29,8 @@ params_tfidf = {
     'norm': "l2",
     'use_idf': True,
     'smooth_idf': True,
-    'sublinear_tf': False
+    'sublinear_tf': False,
+    'sparse': False
 }
 
 #################################################

@@ -38,7 +38,7 @@ def main(_args):
     toke = Tokenizer()
     vecto = MyVectorizer()
     pca = PCA()
-    clf = GradientBoostingClassifier(verbose=0, n_estimators=1)
+    clf = GradientBoostingClassifier(verbose=0)
 
     # Stack it all in a pipeline
     cachedir = mkdtemp()
@@ -53,12 +53,15 @@ def main(_args):
                     )
 
     # Build a Grid parameters, then the GSCV object
+    # One dict is one grid to go through.
     params_grid = [
-        # {'toke__n_clusters': [1, 5, 10]},
-        # {'toke__max_df': [0.3, 0.1]},
-        # {'vecto__max_df': [0.3, 0.1]},
-        {'pca__n_components': [1000, None]},
-        {'clf__n_estimators': [1]}
+        {
+            # 'toke__n_clusters': [1, 5, 10],
+            # 'toke__max_df': [0.3, 0.1],
+            # 'vecto__max_df': [0.3, 0.1],
+            'pca__n_components': [100],
+            'clf__n_estimators': [1]
+        }
     ]
 
     GSCV = GridSearchCV(pipe, n_jobs=3, param_grid=params_grid, verbose=3)

@@ -46,12 +46,14 @@ class MyVectorizer(TfidfVectorizer):
         self.parameters = deepcopy(params.params_tfidf)
         self.parameters.update(kwargs)
         keys = list(self.parameters.keys())
+        mother_params = self.parameters.copy()
 
         for key in keys:
-            if key not in params.params_tfidf:
-                self.parameters.pop(key, None)
+            if key not in TfidfVectorizer.__init__.__code__.co_varnames:
+                mother_params.pop(key, None)
+
         # Init mother
-        super(MyVectorizer, self).__init__(**self.parameters)
+        super(MyVectorizer, self).__init__(**mother_params)
 
     def fit(self, sentences, y=None, **kwargs):
         print('Fitting…')
@@ -59,12 +61,23 @@ class MyVectorizer(TfidfVectorizer):
 
     def transform(self, sentences, **kwargs):
         print('Transforming…')
-        return super(MyVectorizer, self).transform(sentences).toarray()
+        out = super(MyVectorizer, self).transform(sentences)
+        try:
+            if not self.parameters['sparse']:
+                out = out.toarray()
+        except KeyError:
+            pass
+        return out
 
     def fit_transform(self, sentences, y=None, **kwargs):
         print('Fitting and Transforming...')
-        return super(MyVectorizer, self).fit_transform(sentences, y=y).toarray()
-
+        out = super(MyVectorizer, self).fit_transform(sentences)
+        try:
+            if not self.parameters['sparse']:
+                out = out.toarray()
+        except KeyError:
+            pass
+        return out
 
 def read_lines(filepath):
     lines = []
