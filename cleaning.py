@@ -31,7 +31,7 @@ parser.add_argument('-l',
 
 parser.add_argument('--max-lines',
                     type=int,
-                    default=10,
+                    default=100000,
                     help='This sets the max number of lines to process from the raw input data.')
 
 

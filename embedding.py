@@ -5,9 +5,14 @@ import requests
 import os
 from bs4 import BeautifulSoup
 import numpy as np
+from tempfile import mkdtemp
+from shutil import rmtree
+from sklearn.externals.joblib import Memory
 
 from sklearn.cluster import KMeans
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
+from sklearn.model_selection import GridSearchCV
 import re
 from unidecode import unidecode
 import sys
@@ -17,6 +22,8 @@ from sklearn.pipeline import Pipeline
 import io
 from PyPDF2 import PdfFileReader
 from pathlib2 import Path
+from sklearn.base import BaseEstimator
+from pdfquery import PDFQuery
 import time
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -112,13 +119,14 @@ def complete(df):
     print('Completing database…')
     drugs_in_train = df['drug_names'].apply(lambda s: unidecode(str(s)))
     drugs_in_train = [n for s in drugs_in_train for n in s.split(',')]
-    drugs_df = pandas.read_csv('/Users/remydubois/Documents/perso/repos/rd_repos/posos-challenge/results/drug_names')
+    drugs_df = pandas.read_csv('./results/drug_names')
 
     # get all the ids related to a drug name, in order to query against open-medicaments with all the ids. If a short name is related to severla
     # ids, then all the description should same (or at least very similar), therefore, I just take the first description that pops out.
     dico = {}
     for n in np.unique(drugs_in_train):
-        dico[n] = list(drugs_df[drugs_df.drug_names == n].drug_ids)
+        if str(n) != 'nan':
+            dico[n] = list(drugs_df[drugs_df.name == n].id)
 
     # Get the missing descriptions
     remaining = [k for k in dico.keys() if k not in list(existing_indications.drug_names)]
@@ -137,7 +145,7 @@ def complete(df):
             except KeyboardInterrupt:
                 print('Interrupted, saving retrieved information.')
                 existing_indications.to_csv(
-                    '/Users/remydubois/Documents/perso/repos/rd_repos/posos-challenge/results/indications',
+                    './results/indications',
                     index=True)
                 try:
                     sys.exit(0)
@@ -148,7 +156,7 @@ def complete(df):
             pandas.DataFrame([[n, indication]], columns=['drug_names', 'descriptions']))
 
     # frame = pandas.DataFrame(list(dico.items()), columns=['drug_names', 'descriptions'])
-    existing_indications.to_csv('/Users/remydubois/Documents/perso/repos/rd_repos/posos-challenge/results/indications',
+    existing_indications.to_csv('./results/indications',
                                 index=True)
     print('DB completed')
 
@@ -158,16 +166,20 @@ def complete(df):
 # As of now: this object does not handle the 'NF', however they are rejected by the tfidf thanks to
 # the parameter max_df. It means that drugs with no descriptions ('NF' for 'Not Found') have zero-coordinates
 # in the frequency space.
-# It can be fully inegrated in sklearn's pipeline (see main for test), but does not handle properly (at
+# It can be fully integrated in sklearn's pipeline (see main for test), but does not handle properly (at
 # least not tested) gridsearch as parameters are not handled properly (**kwargs might raise errors due to
 # dirty inheritance).
-class Tokenizer(TfidfVectorizer, KMeans):
+class Tokenizer(TfidfVectorizer, KMeans, BaseEstimator):
 
-    def __init__(self, drug_descriptions='./results/indications', n_clusters=20, **kwargs):
-        self._descriptions = pandas.read_csv(drug_descriptions)
+    def __init__(self, n_clusters=1, **kwargs):
+        self._descriptions = pandas.read_csv('./results/indications')
 
-        KMeans.__init__(self, n_clusters=n_clusters)
-        TfidfVectorizer.__init__(self, max_df=0.2)
+        cluster_params = {k:kwargs[k] for k in kwargs if k in KMeans.__init__.__code__.co_varnames}
+        tf_params = {k:kwargs[k] for k in kwargs if k in TfidfVectorizer.__init__.__code__.co_varnames}
+
+        KMeans.__init__(self, n_clusters, **cluster_params)
+        TfidfVectorizer.__init__(self, **tf_params)
+        BaseEstimator.__init__(self)
 
     def fit(self, df, y=None):
         # df is here the full dataframe with sentences, drugs_names etc
@@ -223,7 +235,7 @@ class Tokenizer(TfidfVectorizer, KMeans):
             sentences.append(c)
 
         # Delete description attribute for memory consumption
-        del self._descriptions
+        # del self._descriptions
 
         return sentences
 
@@ -236,17 +248,27 @@ def main(_args):
     input_train = pandas.read_csv(
         './results/corr_lemm/final/input_train')
 
-    _ = complete(input_train)
+    y_train = list(pandas.read_csv('/Users/remydubois/Desktop/y_train.csv', sep=';').intention)
 
-    # toke = Tokenizer(**vars(_args))
+    # _ = complete(input_train)
 
-    # this is just a test for integration.
-    # pca = TfidfVectorizer()
+    toke = Tokenizer()
 
-    # pipe = Pipeline([('t',toke),('pca',pca)])
+    tf = TfidfVectorizer()
 
-    # pipe.fit_transform(input_train)
+    clf = GradientBoostingClassifier(verbose=0,n_estimators=5)
 
+    cachedir = mkdtemp()
+    memory = Memory(cachedir=cachedir, verbose=10)
+    pipe = Pipeline([('t',toke),('tf',tf), ('clf',clf)], memory=memory)
+
+    grid_params = [{'t__n_clusters':[20, 10, 1]}]
+
+    grid = GridSearchCV(pipe, n_jobs=3, param_grid=grid_params)
+
+    grid.fit(input_train,y_train)
+    print(grid.best_score_)
+    print(grid.best_params_)
 
 if __name__ == '__main__':
     args = parser.parse_args()
