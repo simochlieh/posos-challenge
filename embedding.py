@@ -17,54 +17,54 @@ from sklearn.pipeline import Pipeline
 import io
 from PyPDF2 import PdfFileReader
 from pathlib2 import Path
-from pdfquery import PDFQuery
 import time
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-
 FORBIDDEN_INDICATIONS = [" Pas d'indication thérapeutique "]
 
 parser = argparse.ArgumentParser(description="This script runs loads the description db (if needed) "
-                                            "and clusterise drugs based on their description, "
-                                            "finally replaces them with tokens based on their cluster")
+                                             "and clusterise drugs based on their description, "
+                                             "finally replaces them with tokens based on their cluster")
 parser.add_argument('--n_clusters',
                     default=20,
                     help="This parameter is used to choose the number of clusters in which to classify drugs.")
 
 
 def scrape_pdf(url):
-    #As the link provided in open-medicaments redirects toward the EU drug databases, the javascript needs to be
-    #scrapped as well in order to reach the right storage URL
+    # As the link provided in open-medicaments redirects toward the EU drug databases, the javascript needs to be
+    # scrapped as well in order to reach the right storage URL
     r = requests.get(url, allow_redirects=True)
-    #Each drug has a number following "#" in the url
-    num_med = re.findall('#[0-9]*', url)[0].replace('#','')
+    # Each drug has a number following "#" in the url
+    num_med = re.findall('#[0-9]*', url)[0].replace('#', '')
     text = r.text
     # Mind the '080' which is refered to as '80' in the EU database
     num_med = str(int(num_med))
     # Extract the 'id' which is made out of a datetime and other numbers
     try:
-        med_id = re.findall('med_nr\['+num_med+'\]\ \=\ \"[0-9]*\"',text)[0].split('"')[1]
+        med_id = re.findall('med_nr\[' + num_med + '\]\ \=\ \"[0-9]*\"', text)[0].split('"')[1]
     except:
         print('drug not in EU database')
         return 'NF'
-    #Now reconstitute url of the actual storage
-    storage_url = 'http://ec.europa.eu/health/documents/community-register/'+med_id[:4]+'/'+med_id+'/anx_'+med_id[8:]+'_fr.pdf'
-    #request the actual pdf
+    # Now reconstitute url of the actual storage
+    storage_url = 'http://ec.europa.eu/health/documents/community-register/' + med_id[
+                                                                               :4] + '/' + med_id + '/anx_' + med_id[
+                                                                                                              8:] + '_fr.pdf'
+    # request the actual pdf
     r = requests.get(storage_url)
-    #Bare 
+    # Bare
     time.sleep(0.5)
     f = io.BytesIO(r.content)
     try:
         reader = PdfFileReader(f)
     except:
-        #Get thrown when the pdf is not compiled the right way
-        print('Error while parsing pdf at url: %s'%(url))
+        # Get thrown when the pdf is not compiled the right way
+        print('Error while parsing pdf at url: %s' % (url))
         return 'NF'
-    #get text which might be spread on page 2 and 3
+    # get text which might be spread on page 2 and 3
     contents = reader.getPage(1).extractText() + reader.getPage(2).extractText()
     try:
-        indication = re.findall('(?<=Indications thérapeutiques)(.*)(?=4.2)', contents.replace('\n',''))[0]
+        indication = re.findall('(?<=Indications thérapeutiques)(.*)(?=4.2)', contents.replace('\n', ''))[0]
     except IndexError:
         # Some pdf are not readable: they do not seem to contain any text (at least, pypdf does not find any text)
         print('Not readable PDF')
@@ -81,76 +81,81 @@ def grab_indications(ide):
         # If the json contains an hyperlink, then go to this hyperlink, otherwise parse the content of 'indicationsTherapeutiques'
         if ' Vous trouverez les indications thérapeutiques de ce médicament dans le paragraphe 4.1 du RCP ou dans le paragraphe 1 de la notice.' in html:
             # Get the hyperlink out of the json
-            link = re.search('http:\/\/[a-z.\/\-\#0-9_]*',html)[0]
+            link = re.search('http:\/\/[a-z.\/\-\#0-9_]*', html)[0]
             indication = scrape_pdf(link)
         else:
-            #Parse the html
+            # Parse the html
             soup = BeautifulSoup(html, 'html.parser')
             indication = str(soup.get_text())
     except KeyError:
         indication = 'NF'
 
-    #get rid of some trash    
+    # get rid of some trash
     indication = re.sub(FORBIDDEN_INDICATIONS[0], 'NF', indication)
     indication = re.sub("Plus d'information en cliquant ici", '', indication)
 
     return indication
 
+
 def complete(df):
-    #Check for existing description file:
+    # Check for existing description file:
     description_file = './results/indications'
-    #If an existing description file is found, then open it in order to complete it, otherwise create a new empty dataframe.
+    # If an existing description file is found, then open it in order to complete it, otherwise create a new empty dataframe.
     if Path(description_file).is_file():
         print('Description file found.')
         existing_indications = pandas.read_csv(description_file, index_col=0)
     else:
         print('No description file found… Creating description file.')
-        existing_indications = pandas.DataFrame(columns=['drug_names','descriptions'])
+        existing_indications = pandas.DataFrame(columns=['drug_names', 'descriptions'])
 
-    #Get the drugs present in the train dataset
+    # Get the drugs present in the train dataset
     print('Completing database…')
     drugs_in_train = df['drug_names'].apply(lambda s: unidecode(str(s)))
     drugs_in_train = [n for s in drugs_in_train for n in s.split(',')]
     drugs_df = pandas.read_csv('/Users/remydubois/Documents/perso/repos/rd_repos/posos-challenge/results/drug_names')
 
-    #get all the ids related to a drug name, in order to query against open-medicaments with all the ids. If a short name is related to severla
+    # get all the ids related to a drug name, in order to query against open-medicaments with all the ids. If a short name is related to severla
     # ids, then all the description should same (or at least very similar), therefore, I just take the first description that pops out.
     dico = {}
     for n in np.unique(drugs_in_train):
         dico[n] = list(drugs_df[drugs_df.drug_names == n].drug_ids)
 
-    #Get the missing descriptions
+    # Get the missing descriptions
     remaining = [k for k in dico.keys() if k not in list(existing_indications.drug_names)]
-    
-    #Go through all the short names
+
+    # Go through all the short names
     for n in tqdm.tqdm(remaining):
         indication = 'NF'
         i = 0
-        #For a short name, ho through all its ids
+        # For a short name, ho through all its ids
         while indication == 'NF' and i < len(dico[n]):
             try:
                 indication = grab_indications(dico[n][i])
                 i += 1
 
-            #If interrupted, save what has been retrieved so far.
+            # If interrupted, save what has been retrieved so far.
             except KeyboardInterrupt:
                 print('Interrupted, saving retrieved information.')
-                existing_indications.to_csv('/Users/remydubois/Documents/perso/repos/rd_repos/posos-challenge/results/indications',
-                             index=True)
+                existing_indications.to_csv(
+                    '/Users/remydubois/Documents/perso/repos/rd_repos/posos-challenge/results/indications',
+                    index=True)
                 try:
                     sys.exit(0)
                 except SystemExit:
                     os._exit(0)
 
-        existing_indications = existing_indications.append(pandas.DataFrame([[n,indication]], columns=['drug_names','descriptions']))
+        existing_indications = existing_indications.append(
+            pandas.DataFrame([[n, indication]], columns=['drug_names', 'descriptions']))
 
-    #frame = pandas.DataFrame(list(dico.items()), columns=['drug_names', 'descriptions'])
-    existing_indications.to_csv('/Users/remydubois/Documents/perso/repos/rd_repos/posos-challenge/results/indications', index=True)
+    # frame = pandas.DataFrame(list(dico.items()), columns=['drug_names', 'descriptions'])
+    existing_indications.to_csv('/Users/remydubois/Documents/perso/repos/rd_repos/posos-challenge/results/indications',
+                                index=True)
     print('DB completed')
 
     return existing_indications
 
-# As of now: this object does not handle the 'NF', however they are rejected by the tfidf thanks to 
+
+# As of now: this object does not handle the 'NF', however they are rejected by the tfidf thanks to
 # the parameter max_df. It means that drugs with no descriptions ('NF' for 'Not Found') have zero-coordinates
 # in the frequency space.
 # It can be fully inegrated in sklearn's pipeline (see main for test), but does not handle properly (at
@@ -158,11 +163,11 @@ def complete(df):
 # dirty inheritance).
 class Tokenizer(TfidfVectorizer, KMeans):
 
-    def __init__(self, drug_descriptions='./results/indications', n_clusters = 20, **kwargs):
+    def __init__(self, drug_descriptions='./results/indications', n_clusters=20, **kwargs):
         self._descriptions = pandas.read_csv(drug_descriptions)
 
         KMeans.__init__(self, n_clusters=n_clusters)
-        TfidfVectorizer.__init__(self, max_df = 0.2)
+        TfidfVectorizer.__init__(self, max_df=0.2)
 
     def fit(self, df, y=None):
         # df is here the full dataframe with sentences, drugs_names etc
@@ -176,9 +181,9 @@ class Tokenizer(TfidfVectorizer, KMeans):
         TfidfVectorizer.fit(self, raw_documents=self._descriptions.descriptions, y=y)
 
     def transform(self, df, **kwargs):
-        
+
         vectorized = TfidfVectorizer.transform(self, raw_documents=self._descriptions.descriptions)
-        
+
         KMeans.fit(self, X=vectorized)
 
         labels = KMeans.predict(self, X=vectorized)
@@ -203,25 +208,26 @@ class Tokenizer(TfidfVectorizer, KMeans):
                 drug_names = row['drug_names'].split(',')
             except AttributeError:
                 drug_names = []
-            
+
             drug_tokens = [mapping.get(unidecode(n)) for n in drug_names]
 
             sentence = row['corr_lemm_sentence'].strip().split(' ')
-            
-            tokenized_sentence = ' '.join(map(lambda t:t[1] if t[0] not in positions else drug_tokens.pop(0), enumerate(sentence)))
+
+            tokenized_sentence = ' '.join(
+                map(lambda t: t[1] if t[0] not in positions else drug_tokens.pop(0), enumerate(sentence)))
             return tokenized_sentence
 
         sentences = []
-        for _,row in tqdm.tqdm(df.iterrows()):
+        for _, row in tqdm.tqdm(df.iterrows()):
             c = replace_in_sentence(row)
             sentences.append(c)
 
-        #Delete description attribute for memory consumption
+        # Delete description attribute for memory consumption
         del self._descriptions
 
         return sentences
 
-    def fit_transform(self,df, y=None):
+    def fit_transform(self, df, y=None):
         self.fit(df)
         return self.transform(df)
 
@@ -232,19 +238,17 @@ def main(_args):
 
     _ = complete(input_train)
 
-    #toke = Tokenizer(**vars(_args))
+    # toke = Tokenizer(**vars(_args))
 
-    #this is just a test for integration.
-    #pca = TfidfVectorizer()
+    # this is just a test for integration.
+    # pca = TfidfVectorizer()
 
-    #pipe = Pipeline([('t',toke),('pca',pca)])
+    # pipe = Pipeline([('t',toke),('pca',pca)])
 
-    #pipe.fit_transform(input_train)
-    
+    # pipe.fit_transform(input_train)
+
 
 if __name__ == '__main__':
-
     args = parser.parse_args()
 
     main(args)
-
