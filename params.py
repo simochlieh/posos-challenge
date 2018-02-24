@@ -8,6 +8,14 @@ import numpy as np
 #################################################
 # TF-IDF parameters
 #################################################
+"""
+While the TruncatedSVD transformer works with any (sparse) feature matrix, 
+using it on tf–idf matrices is recommended over raw frequency counts in an 
+LSA/document processing setting. In particular, sublinear scaling and inverse 
+document frequency should be turned on (sublinear_tf=True, use_idf=True) to 
+bring the feature values closer to a Gaussian distribution, compensating for 
+LSA’s erroneous assumptions about textual data.
+"""
 
 params_tfidf = {
     'input': "content",
@@ -29,8 +37,9 @@ params_tfidf = {
     'norm': "l2",
     'use_idf': True,
     'smooth_idf': True,
-    'sublinear_tf': False,
-    'sparse': False
+    'sublinear_tf': True,
+    'sparse': True,
+    'verbose': 0
 }
 
 #################################################

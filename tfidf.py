@@ -56,11 +56,13 @@ class MyVectorizer(TfidfVectorizer):
         super(MyVectorizer, self).__init__(**mother_params)
 
     def fit(self, sentences, y=None, **kwargs):
-        print('Fitting…')
+        if self.parameters['verbose'] > 0:
+            print('Fitting…')
         super(MyVectorizer, self).fit(sentences)
 
     def transform(self, sentences, **kwargs):
-        print('Transforming…')
+        if self.parameters['verbose'] > 0:
+            print('Transforming…')
         out = super(MyVectorizer, self).transform(sentences)
         try:
             if not self.parameters['sparse']:
@@ -70,14 +72,16 @@ class MyVectorizer(TfidfVectorizer):
         return out
 
     def fit_transform(self, sentences, y=None, **kwargs):
-        print('Fitting and Transforming...')
+        if self.parameters['verbose'] > 0:
+            print('Fitting and Transforming...')
         out = super(MyVectorizer, self).fit_transform(sentences)
         try:
             if not self.parameters['sparse']:
                 out = out.toarray()
+                return out
         except KeyError:
-            pass
-        return out
+            return out
+
 
 def read_lines(filepath):
     lines = []
@@ -110,4 +114,3 @@ def main(args):
     if not os.path.exists(output_path):
         utils.create_dir(output_path)
     sparse.save_npz(output_path, vectorized)
-

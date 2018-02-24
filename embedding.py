@@ -28,6 +28,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 
 FORBIDDEN_INDICATIONS = [" Pas d'indication thérapeutique "]
 
+
 def scrape_pdf(url):
     # As the link provided in open-medicaments redirects toward the EU drug databases, the javascript needs to be
     # scrapped as well in order to reach the right storage URL
@@ -176,8 +177,9 @@ class Tokenizer(TfidfVectorizer, KMeans):
         except ValueError:
             print('Dimensions mismatch, probably the description file is not the right one.')
 
-        if self._verbose>0:
+        if self._verbose > 0:
             print('Fitting tokenizer…')
+
         TfidfVectorizer.fit(self, raw_documents=self._descriptions.descriptions, y=y)
 
     def transform(self, df, **kwargs):

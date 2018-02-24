@@ -5,12 +5,12 @@ from tfidf import MyVectorizer
 
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.decomposition import PCA
+from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction.text import TfidfVectorizer
 from tempfile import mkdtemp
 from shutil import rmtree
 from sklearn.externals.joblib import Memory
-
+from balance import Balance
 import argparse
 import pandas
 
@@ -32,12 +32,13 @@ def main(_args):
     # read data in
     input_train = pandas.read_csv(
         './results/corr_lemm/final/input_train')
-    y_train = list(pandas.read_csv('/Users/remydubois/Desktop/posos/y_train.csv', sep=';').intention)
+    y_train = pandas.read_csv('/Users/remydubois/Desktop/posos/y_train.csv', sep=';').intention.values
 
     # Bring objects in
     toke = Tokenizer()
-    vecto = MyVectorizer()
-    pca = PCA()
+    vecto = TfidfVectorizer()
+    smote = Balance()
+    pca = TruncatedSVD(n_components=100)
     clf = GradientBoostingClassifier(verbose=0)
 
     # Stack it all in a pipeline
@@ -46,7 +47,8 @@ def main(_args):
     pipe = Pipeline(steps=
                     [('toke', toke),
                      ('vecto', vecto),
-                     ('pca', pca),
+                     ('smote', smote),
+                     # ('pca', pca),
                      ('clf', clf)
                      ],
                     memory=memory
@@ -59,12 +61,13 @@ def main(_args):
             # 'toke__n_clusters': [1, 5, 10],
             # 'toke__max_df': [0.3, 0.1],
             # 'vecto__max_df': [0.3, 0.1],
-            'pca__n_components': [100],
-            'clf__n_estimators': [1]
+            # 'pca__n_components': [100],
+            'clf__n_estimators': [1],
+            'smote': [smote, None]
         }
     ]
 
-    GSCV = GridSearchCV(pipe, n_jobs=3, param_grid=params_grid, verbose=3)
+    GSCV = GridSearchCV(pipe, n_jobs=1, param_grid=params_grid, verbose=3)
 
     # Now fit
     GSCV.fit(input_train, y_train)
