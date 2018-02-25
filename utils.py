@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 from sklearn.model_selection import GridSearchCV
 import pickle
+from tabulate import tabulate
 
 
 def create_dir(path):
@@ -72,7 +73,9 @@ def get_tokenized_drugs_path(label):
 
 
 def extend_class(cls):
-    return lambda f: (setattr(cls, f.__name__, f) or f)
+    def wrapper(f):
+        return setattr(cls, f.__name__, f) or f
+    return wrapper
 
 
 @extend_class(GridSearchCV)
@@ -85,6 +88,7 @@ def write_results(self):
         f.write('\nBest accuracy: %f' % (self.best_score_))
         f.write('\nobtained with:\n' + str(self.best_params_))
         f.write('\n\nAmong a 3 fold CV test on those params:\n' + str(self.param_grid))
+        f.write('\n\nWhole CV results in the pickle object.')
 
     with open('./results/%s/model.pkl' % timestamp, 'wb+') as f:
-        pickle.dump(self.best_estimator_, f)
+        pickle.dump(self, f)

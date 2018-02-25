@@ -230,7 +230,7 @@ class Tokenizer(TfidfVectorizer, KMeans):
         # Delete description attribute for memory consumption
         # del self._descriptions
 
-        return sentences
+        return np.array(sentences)
 
     def fit_transform(self, df, y=None):
         self.fit(df, y=y)

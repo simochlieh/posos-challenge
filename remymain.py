@@ -2,10 +2,12 @@
 
 from embedding import Tokenizer
 from tfidf import MyVectorizer
+from pipe import MyPipeline
 
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.decomposition import TruncatedSVD
+from sklearn.tree import DecisionTreeClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 from tempfile import mkdtemp
 from shutil import rmtree
@@ -38,13 +40,13 @@ def main(_args):
     toke = Tokenizer()
     vecto = TfidfVectorizer()
     smote = Balance()
-    pca = TruncatedSVD(n_components=100)
-    clf = GradientBoostingClassifier(verbose=0)
+    # pca = TruncatedSVD(n_components=100)
+    clf = GradientBoostingClassifier()
 
     # Stack it all in a pipeline
     cachedir = mkdtemp()
     memory = Memory(cachedir=cachedir, verbose=0)
-    pipe = Pipeline(steps=
+    pipe = MyPipeline(steps=
                     [('toke', toke),
                      ('vecto', vecto),
                      ('smote', smote),
@@ -58,16 +60,16 @@ def main(_args):
     # One dict is one grid to go through.
     params_grid = [
         {
-            # 'toke__n_clusters': [1, 5, 10],
+            # 'toke__n_clusters': [1, 5, 20],
             # 'toke__max_df': [0.3, 0.1],
             # 'vecto__max_df': [0.3, 0.1],
             # 'pca__n_components': [100],
-            'clf__n_estimators': [1],
+            'clf__n_estimators': [100],
             'smote': [smote, None]
         }
     ]
 
-    GSCV = GridSearchCV(pipe, n_jobs=1, param_grid=params_grid, verbose=3)
+    GSCV = GridSearchCV(pipe, n_jobs=3, param_grid=params_grid, verbose=3)
 
     # Now fit
     GSCV.fit(input_train, y_train)
