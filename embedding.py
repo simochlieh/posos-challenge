@@ -1,3 +1,5 @@
+# -*- coding: utf8 -*-
+
 # Drug names embedding file. The goal is to cluster drug names according to their therapeutic indications
 import tqdm
 import pandas

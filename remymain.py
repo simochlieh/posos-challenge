@@ -3,7 +3,8 @@
 from embedding import Tokenizer
 from tfidf import MyVectorizer
 from pipe import MyPipeline
-
+from collections import Counter
+from balance import Balance
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.decomposition import TruncatedSVD
@@ -12,9 +13,10 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from tempfile import mkdtemp
 from shutil import rmtree
 from sklearn.externals.joblib import Memory
-from balance import Balance
+from balance import MySmote
 import argparse
 import pandas
+import numpy
 
 from utils import *
 
@@ -36,25 +38,29 @@ def main(_args):
         './results/corr_lemm/final/input_train')
     y_train = pandas.read_csv('/Users/remydubois/Desktop/posos/y_train.csv', sep=';').intention.values
 
+    # can be ignored: used for smote
+    # counter = Counter(y_train)
+    # ratios = {k: int(counter[k] - (counter[k] - numpy.mean(list(counter.values()))) * 0.2) for k in counter.keys()}
+
     # Bring objects in
     toke = Tokenizer()
     vecto = TfidfVectorizer()
-    smote = Balance()
+    smote = Balance(ratio=ratios)
     # pca = TruncatedSVD(n_components=100)
-    clf = GradientBoostingClassifier()
+    clf = GradientBoostingClassifier(n_estimators=10, verbose=1, subsample=1.0, max_depth=3)
 
     # Stack it all in a pipeline
     cachedir = mkdtemp()
     memory = Memory(cachedir=cachedir, verbose=0)
     pipe = MyPipeline(steps=
-                    [('toke', toke),
-                     ('vecto', vecto),
-                     ('smote', smote),
-                     # ('pca', pca),
-                     ('clf', clf)
-                     ],
-                    memory=memory
-                    )
+                      [('toke', toke),
+                       ('vecto', vecto),
+                       ('smote', smote),
+                       # ('pca', pca),
+                       ('clf', clf)
+                       ],
+                      memory=memory
+                      )
 
     # Build a Grid parameters, then the GSCV object
     # One dict is one grid to go through.
@@ -64,8 +70,9 @@ def main(_args):
             # 'toke__max_df': [0.3, 0.1],
             # 'vecto__max_df': [0.3, 0.1],
             # 'pca__n_components': [100],
-            'clf__n_estimators': [100],
-            'smote': [smote, None]
+            'clf__n_estimators': [10, 20, 30],
+            'clf__max_depth': [2, 3],
+            'smote': [None]
         }
     ]
 
