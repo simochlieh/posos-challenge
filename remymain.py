@@ -39,8 +39,8 @@ def main(_args):
     y_train = pandas.read_csv('/Users/remydubois/Desktop/posos/y_train.csv', sep=';').intention.values
 
     # can be ignored: used for smote
-    # counter = Counter(y_train)
-    # ratios = {k: int(counter[k] - (counter[k] - numpy.mean(list(counter.values()))) * 0.2) for k in counter.keys()}
+    counter = Counter(y_train)
+    ratios = {k: int(counter[k] - (counter[k] - numpy.mean(list(counter.values()))) * 0.2) for k in counter.keys()}
 
     # Bring objects in
     toke = Tokenizer()
@@ -66,12 +66,12 @@ def main(_args):
     # One dict is one grid to go through.
     params_grid = [
         {
-            # 'toke__n_clusters': [1, 5, 20],
-            # 'toke__max_df': [0.3, 0.1],
-            # 'vecto__max_df': [0.3, 0.1],
+            'toke__n_clusters': [1, 5, 20],
+            'toke__max_df': [0.3, 0.1],
+            'vecto__max_df': [0.3, 0.1],
             # 'pca__n_components': [100],
-            'clf__n_estimators': [10, 20, 30],
-            'clf__max_depth': [2, 3],
+            'clf__n_estimators': [30, 40, 50],
+            # 'clf__max_depth': [2, 3],
             'smote': [None]
         }
     ]
