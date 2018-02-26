@@ -2,7 +2,6 @@ import os
 from datetime import datetime
 from sklearn.model_selection import GridSearchCV
 import pickle
-from tabulate import tabulate
 
 
 def create_dir(path):

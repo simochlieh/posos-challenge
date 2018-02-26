@@ -41,46 +41,49 @@ parser.add_argument('--label',
 class MyVectorizer(TfidfVectorizer):
     # In practice,
     # all the sklearn parameters will be fed into this __init__ from the params.py file.
-    def __init__(self, **kwargs):
-        # Get params
-        self.parameters = deepcopy(params.params_tfidf)
-        self.parameters.update(kwargs)
-        keys = list(self.parameters.keys())
-        mother_params = self.parameters.copy()
 
-        for key in keys:
-            if key not in TfidfVectorizer.__init__.__code__.co_varnames:
-                mother_params.pop(key, None)
-
+    def __init__(self, is_sparse=True, max_df=0.1, max_features=None, verbose=True):
         # Init mother
-        super(MyVectorizer, self).__init__(**mother_params)
+        self.verbose = verbose
+        self.sparse = is_sparse
+        super(MyVectorizer, self).__init__(max_df=max_df, max_features=max_features)
 
     def fit(self, sentences, y=None, **kwargs):
-        if self.parameters['verbose'] > 0:
+        if self.verbose:
             print('Fitting…')
         super(MyVectorizer, self).fit(sentences)
 
     def transform(self, sentences, **kwargs):
-        if self.parameters['verbose'] > 0:
+        if self.verbose:
             print('Transforming…')
         out = super(MyVectorizer, self).transform(sentences)
+        # TODO: investigate KeyError exceptions
         try:
-            if not self.parameters['sparse']:
+            if not self.sparse:
                 out = out.toarray()
         except KeyError:
             pass
         return out
 
     def fit_transform(self, sentences, y=None, **kwargs):
-        if self.parameters['verbose'] > 0:
+        if self.verbose > 0:
             print('Fitting and Transforming...')
         out = super(MyVectorizer, self).fit_transform(sentences)
         try:
-            if not self.parameters['sparse']:
+            if not self.verbose:
                 out = out.toarray()
                 return out
         except KeyError:
             return out
+
+    # I don't think this will be useful
+    # def _set_parameters(self):
+    #     self.parameters = {
+    #         'is_sparse': self.sparse,
+    #         'max_df': self.max_df,
+    #         'max_features': self.max_features,
+    #         'verbose': self.verbose
+    #     }
 
 
 def read_lines(filepath):
