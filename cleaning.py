@@ -168,7 +168,7 @@ def correct_and_lemmatize(input_data, drug_names_set, enable_lemm):
                          ' '.join(splits), ','.join(map(str, drug_ids)), ','.join(drug_names))
     df = pnd.DataFrame(input_data,
                        columns=(params.SENTENCE_ID, params.RAW_SENTENCE_COL,
-                                params.CORR_LEMM_SENTENCE_COL, params.DRUG_IDS_COL, params.DRUG_NAMES_COL))
+                                params.CORR_LEMM_SENTENCE_COL, params.DRUG_POS_COL, params.DRUG_NAMES_COL))
     return df
 
 

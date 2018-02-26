@@ -42,7 +42,7 @@ class MyVectorizer(TfidfVectorizer):
     # In practice,
     # all the sklearn parameters will be fed into this __init__ from the params.py file.
 
-    def __init__(self, is_sparse=True, max_df=0.1, max_features=None, verbose=True):
+    def __init__(self, is_sparse=True, max_df=0.1, max_features=None, verbose=False):
         # Init mother
         self.verbose = verbose
         self.sparse = is_sparse
@@ -69,12 +69,12 @@ class MyVectorizer(TfidfVectorizer):
         if self.verbose > 0:
             print('Fitting and Transforming...')
         out = super(MyVectorizer, self).fit_transform(sentences)
-        try:
-            if not self.verbose:
-                out = out.toarray()
-                return out
-        except KeyError:
-            return out
+        # try:
+        #     if not self.verbose:
+        #         out = out.toarray()
+        #         return out
+        # except KeyError:
+        return out
 
     # I don't think this will be useful
     # def _set_parameters(self):
