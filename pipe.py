@@ -11,6 +11,11 @@ from sklearn.utils.validation import check_memory
 # Modifies as well the scoring method (peculiar to SMOTE or other data augmentation alterations),
 # As those steps needs to be bypassed when scoring the estimator (test data must not be changed).
 
+# As of 25/02, there still needs some work on the predict method, as the SMOTE part needs to be bypassed.
+# Indeed test set must not be modified by the SMOTE. Just follow same wayaround as in score.
+
+# As of 26/02, the transform method must be modified as fit_transform and fit (outputting both X and y).
+
 class MyPipeline(Pipeline):
 
     def __init__(self, steps, memory=None):
@@ -69,6 +74,18 @@ class MyPipeline(Pipeline):
         if self._final_estimator is not None:
             self._final_estimator.fit(Xt, y, **fit_params)
         return self
+
+    def fit_transform(self, X, y=None, **fit_params):
+        last_step = self._final_estimator
+        #########################################################
+        Xt, y, fit_params = self._fit(X, y, **fit_params)
+        #########################################################
+        if hasattr(last_step, 'fit_transform'):
+            return last_step.fit_transform(Xt, y, **fit_params)
+        elif last_step is None:
+            return Xt
+        else:
+            return last_step.fit(Xt, y, **fit_params).transform(Xt)
 
     @if_delegate_has_method(delegate='_final_estimator')
     def score(self, X, y=None, sample_weight=None):
