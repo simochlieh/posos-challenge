@@ -10,7 +10,6 @@ import numpy as np
 from tempfile import mkdtemp
 from shutil import rmtree
 from sklearn.externals.joblib import Memory
-
 from sklearn.cluster import KMeans
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
@@ -25,6 +24,9 @@ import io
 from PyPDF2 import PdfFileReader
 from pathlib2 import Path
 import time
+from nltk import word_tokenize
+
+import params
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
@@ -164,40 +166,43 @@ def complete(df):
 
 class Tokenizer(TfidfVectorizer, KMeans):
 
-    def __init__(self, verbose=0):
+    def __init__(self, verbose=0, do_clustering=True, n_clusters=20, max_df=0.1):
         self._descriptions = pandas.read_csv('./results/indications')
-
-        KMeans.__init__(self)
-        TfidfVectorizer.__init__(self)
+        self.do_clustering = do_clustering
+        KMeans.__init__(self, n_clusters=n_clusters)
+        TfidfVectorizer.__init__(self, max_df=max_df)
         self._verbose = verbose
 
     def fit(self, df, y=None):
-        # df is here the full dataframe with sentences, drugs_names etc
-        try:
-            if set(df.drug_names.unique()) < set(self._descriptions.drug_names):
-                raise Exception('Some drugs are not in the description file.')
-        except ValueError:
-            print('Dimensions mismatch, probably the description file is not the right one.')
+        if self.do_clustering:
+            # df is here the full dataframe with sentences, drugs_names etc
+            try:
+                if set(df.drug_names.unique()) < set(self._descriptions.drug_names):
+                    raise Exception('Some drugs are not in the description file.')
+            except ValueError:
+                print('Dimensions mismatch, probably the description file is not the right one.')
 
-        if self._verbose > 0:
-            print('Fitting tokenizer…')
+            if self._verbose > 0:
+                print('Fitting tokenizer…')
 
-        TfidfVectorizer.fit(self, raw_documents=self._descriptions.descriptions, y=y)
+            TfidfVectorizer.fit(self, raw_documents=self._descriptions.descriptions, y=y)
 
     def transform(self, df, **kwargs):
+        if self.do_clustering:
+            vectorized = TfidfVectorizer.transform(self, raw_documents=self._descriptions.descriptions)
 
-        vectorized = TfidfVectorizer.transform(self, raw_documents=self._descriptions.descriptions)
+            KMeans.fit(self, X=vectorized)
 
-        KMeans.fit(self, X=vectorized)
+            labels = KMeans.predict(self, X=vectorized)
 
-        labels = KMeans.predict(self, X=vectorized)
+            if self._verbose > 0:
+                print('Labelling drugs…')
 
-        if self._verbose > 0:
-            print('Labelling drugs…')
+            tokens = list(map(lambda l: 'TOKEN_' + str(l), labels))
 
-        tokens = list(map(lambda l: 'TOKEN_' + str(l), labels))
-
-        mapping = dict(zip(self._descriptions.drug_names, tokens))
+            mapping = dict(zip(self._descriptions.drug_names, tokens))
+        else:
+            mapping = dict(zip(self._descriptions.drug_names, self._descriptions.descriptions))
 
         if self._verbose > 0:
             print('Drugs mapped…')
@@ -215,12 +220,16 @@ class Tokenizer(TfidfVectorizer, KMeans):
             except AttributeError:
                 drug_names = []
 
-            drug_tokens = [mapping.get(unidecode(n)) for n in drug_names]
+            replacement = [' '.join(word_tokenize(mapping.get(unidecode(n)))) for n in drug_names]
 
-            sentence = row['corr_lemm_sentence'].strip().split(' ')
+            sentence = row[params.CORR_LEMM_SENTENCE_COL].strip().split(' ')
 
-            tokenized_sentence = ' '.join(
-                map(lambda t: t[1] if t[0] not in positions else drug_tokens.pop(0), enumerate(sentence)))
+            if self.do_clustering:
+                tokenized_sentence = ' '.join(
+                    map(lambda t: t[1] if t[0] not in positions else replacement.pop(0), enumerate(sentence)))
+            else:
+                tokenized_sentence = ' '.join(sentence + replacement).lower()
+                # print(tokenized_sentence)
             return tokenized_sentence
 
         sentences = []
@@ -237,10 +246,3 @@ class Tokenizer(TfidfVectorizer, KMeans):
     def fit_transform(self, df, y=None):
         self.fit(df, y=y)
         return self.transform(df)
-
-    def set_params(self, **kwargs):
-        cluster_params = {k: kwargs[k] for k in kwargs if k in KMeans.__init__.__code__.co_varnames}
-        tf_params = {k: kwargs[k] for k in kwargs if k in TfidfVectorizer.__init__.__code__.co_varnames}
-
-        KMeans.set_params(cluster_params)
-        TfidfVectorizer.set_params(tf_params)
