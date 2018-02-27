@@ -1,11 +1,13 @@
 # Main for experiments
-
+# from myxgb import MyXGB
 from embedding import Tokenizer
 from tfidf import MyVectorizer
 from pipe import MyPipeline
 from collections import Counter
 from balance import Balance
 from sklearn.pipeline import Pipeline
+from sklearn.feature_selection import SelectKBest, SelectFromModel
+from sklearn.feature_selection import chi2
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.decomposition import TruncatedSVD
 from sklearn.tree import DecisionTreeClassifier
@@ -17,6 +19,9 @@ from balance import MySmote
 import argparse
 import pandas
 import numpy
+from sklearn.linear_model import Lasso
+from sklearn.svm import LinearSVC
+from xgboost import XGBClassifier
 
 from utils import *
 
@@ -34,30 +39,33 @@ parser.add_argument('--max_df',
 
 def main(_args):
     # read data in
-    input_train = pandas.read_csv(
-        './results/corr_lemm/final/input_train')
-    y_train = pandas.read_csv('/Users/remydubois/Desktop/posos/y_train.csv', sep=';').intention.values
+    X, y = load_data()
 
     # can be ignored: used for smote
-    counter = Counter(y_train)
+    counter = Counter(y)
     ratios = {k: int(counter[k] - (counter[k] - numpy.mean(list(counter.values()))) * 0.2) for k in counter.keys()}
 
     # Bring objects in
     toke = Tokenizer()
     vecto = TfidfVectorizer()
     smote = Balance(ratio=ratios)
-    # pca = TruncatedSVD(n_components=100)
+    fexKBest = SelectKBest(chi2, k=1500)
+    fexModel = SelectFromModel(LinearSVC(C=0.1, dual=False, penalty='l2'))
+    pca = TruncatedSVD(n_components=500)
+
     clf = GradientBoostingClassifier(n_estimators=10, verbose=1, subsample=1.0, max_depth=3)
+    xgb = XGBClassifier(n_estimators=100, max_depth=5, objective='multi:softmax', silent=False, n_jobs=3)
 
     # Stack it all in a pipeline
     cachedir = mkdtemp()
-    memory = Memory(cachedir=cachedir, verbose=0)
+    memory = Memory(cachedir=cachedir, verbose=1)
     pipe = MyPipeline(steps=
                       [('toke', toke),
                        ('vecto', vecto),
                        ('smote', smote),
-                       # ('pca', pca),
-                       ('clf', clf)
+                       ('pca', pca),
+                       # ('fex', fexKBest),
+                       ('clf', xgb)
                        ],
                       memory=memory
                       )
@@ -66,12 +74,16 @@ def main(_args):
     # One dict is one grid to go through.
     params_grid = [
         {
-            'toke__n_clusters': [1, 5, 20],
-            'toke__max_df': [0.3, 0.1],
-            'vecto__max_df': [0.3, 0.1],
-            # 'pca__n_components': [100],
-            'clf__n_estimators': [30, 40, 50],
+            'toke__n_clusters': [1],
+            'toke__max_df': [0.3],
+            'vecto__max_df': [0.3],
+            'pca': [TruncatedSVD(n_components=500)],
+            'clf__n_estimators': [100],
             # 'clf__max_depth': [2, 3],
+            # 'fex': [None, SelectKBest(chi2, k=200), SelectKBest(chi2, k=500), SelectKBest(chi2, k=1500)],
+            # 'fex__estimator__C': [1, 10, 20],
+            # 'fex__threshold': ["mean"],
+            # 'fex__k': [1500],
             'smote': [None]
         }
     ]
@@ -79,8 +91,10 @@ def main(_args):
     GSCV = GridSearchCV(pipe, n_jobs=3, param_grid=params_grid, verbose=3)
 
     # Now fit
-    GSCV.fit(input_train, y_train)
+    GSCV.fit(X, y)
     GSCV.write_results()
+    print(GSCV.best_score_)
+    print(GSCV.best_params_)
     rmtree(cachedir)
 
 

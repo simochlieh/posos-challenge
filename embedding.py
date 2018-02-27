@@ -164,10 +164,10 @@ def complete(df):
 
 class Tokenizer(TfidfVectorizer, KMeans):
 
-    def __init__(self, verbose=0):
+    def __init__(self, verbose=0, n_clusters=1):
         self._descriptions = pandas.read_csv('./results/indications')
 
-        KMeans.__init__(self)
+        KMeans.__init__(self, n_clusters=n_clusters)
         TfidfVectorizer.__init__(self)
         self._verbose = verbose
 
@@ -238,9 +238,10 @@ class Tokenizer(TfidfVectorizer, KMeans):
         self.fit(df, y=y)
         return self.transform(df)
 
-    def set_params(self, **kwargs):
-        cluster_params = {k: kwargs[k] for k in kwargs if k in KMeans.__init__.__code__.co_varnames}
-        tf_params = {k: kwargs[k] for k in kwargs if k in TfidfVectorizer.__init__.__code__.co_varnames}
-
-        KMeans.set_params(cluster_params)
-        TfidfVectorizer.set_params(tf_params)
+    # def set_params(self, **kwargs):
+    #     cluster_params = {k: kwargs[k] for k in kwargs if k in KMeans.__init__.__code__.co_varnames}
+    #     tf_params = {k: kwargs[k] for k in kwargs if k in TfidfVectorizer.__init__.__code__.co_varnames}
+    #
+    #     KMeans.set_params(cluster_params)
+    #     TfidfVectorizer.set_params(tf_params)
+    #     print(self.get_params())

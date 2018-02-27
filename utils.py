@@ -2,6 +2,7 @@ import os
 from datetime import datetime
 from sklearn.model_selection import GridSearchCV
 import pickle
+import pandas
 from tabulate import tabulate
 
 
@@ -75,6 +76,7 @@ def get_tokenized_drugs_path(label):
 def extend_class(cls):
     def wrapper(f):
         return setattr(cls, f.__name__, f) or f
+
     return wrapper
 
 
@@ -92,3 +94,10 @@ def write_results(self):
 
     with open('./results/%s/model.pkl' % timestamp, 'wb+') as f:
         pickle.dump(self, f)
+
+
+def load_data():
+    input_train = pandas.read_csv(get_corr_lemm_path('final'))
+    y_train = pandas.read_csv('/Users/remydubois/Desktop/posos/y_train.csv', sep=';').intention.values
+
+    return input_train, y_train
