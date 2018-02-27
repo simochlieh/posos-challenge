@@ -10,12 +10,6 @@ from sklearn.decomposition import TruncatedSVD, PCA
 
 import utils
 import params
-import sys
-
-log_file = open("logs/test_pipe.log", "w")
-err_file = open("logs/err_test_pipe.log", "w")
-sys.stdout = log_file
-sys.stderr = err_file
 
 parser = argparse.ArgumentParser(description="This is a test script to run sklearn pipelines on the data.")
 
