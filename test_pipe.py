@@ -7,6 +7,8 @@ from sklearn.model_selection import GridSearchCV, train_test_split
 import pandas as pnd
 from tempfile import mkdtemp
 from sklearn.decomposition import TruncatedSVD, PCA
+import time
+
 
 import utils
 import params
@@ -20,6 +22,7 @@ parser.add_argument('-l',
 
 
 def main(args):
+    start = time.time()
     input_train = pnd.read_csv(utils.get_corr_lemm_path(args.label))
     y = pnd.read_csv(utils.get_labels_path(), sep=';')[params.LABELS_COL].values
     X_train, X_test, y_train, y_test = train_test_split(
@@ -40,22 +43,23 @@ def main(args):
 
     params_grid = dict(
         tokenizer__n_clusters=[1],
-        tokenizer__max_df=[0.1, 0.2],
+        tokenizer__max_df=[0.1],
         vectorizer__max_df=[0.1],
         vectorizer__max_features=[None],
-        svm__C=[1., 50., 100.],
+        svm__C=[60., 30., 50.],
         svm__gamma=[0.1, 0.05, 0.01],
         svm__kernel=['rbf'],
-        pca__n_components=[100, 1000, 6000],
+        pca__n_components=[1000, 2000, 3000, 4000],
     )
     params_pipe = dict(
-        tokenizer__n_clusters=1,  # , 5, 20],
+        tokenizer__n_clusters=20,  # , 5, 20],
         tokenizer__max_df=0.1,  # , 0.2],
         vectorizer__max_df=0.1,  # , 0.05],
-        vectorizer__max_features=4000,
-        svm__C=50.,  # , 100., 10., 1.],
-        svm__gamma=0.01,  # , 0.05, 0.1],
+        vectorizer__max_features=None,
+        svm__C=30.,  # , 100., 10., 1.],
+        svm__gamma=0.05,  # , 0.05, 0.1],
         svm__kernel='rbf',
+        pca__n_components=2000,
     )
     # pipe.set_params(**params_pipe)
     # pipe.fit(X_train, y_train)
@@ -63,6 +67,7 @@ def main(args):
     grid_search = GridSearchCV(pipe, n_jobs=1, cv=5, param_grid=params_grid, verbose=3)
     grid_search.fit(X_train, y_train)
     utils.write_results(grid_search)
+    print("It took %.3f" % (time.time() - start))
 
 
 if __name__ == '__main__':
