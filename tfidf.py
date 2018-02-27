@@ -45,7 +45,7 @@ class MyVectorizer(TfidfVectorizer):
     def __init__(self, is_sparse=True, max_df=0.1, max_features=None, verbose=False):
         # Init mother
         self.verbose = verbose
-        self.sparse = is_sparse
+        self.is_sparse = is_sparse
         super(MyVectorizer, self).__init__(max_df=max_df, max_features=max_features)
 
     def fit(self, sentences, y=None, **kwargs):
@@ -59,7 +59,8 @@ class MyVectorizer(TfidfVectorizer):
         out = super(MyVectorizer, self).transform(sentences)
         # TODO: investigate KeyError exceptions
         try:
-            if not self.sparse:
+            if not self.is_sparse:
+                print(True)
                 out = out.toarray()
         except KeyError:
             pass
@@ -68,12 +69,9 @@ class MyVectorizer(TfidfVectorizer):
     def fit_transform(self, sentences, y=None, **kwargs):
         if self.verbose > 0:
             print('Fitting and Transforming...')
-        out = super(MyVectorizer, self).fit_transform(sentences)
-        # try:
-        #     if not self.verbose:
-        #         out = out.toarray()
-        #         return out
-        # except KeyError:
+        self.fit(sentences, y, **kwargs)
+        out = self.transform(sentences, **kwargs)
+        print(type(out))
         return out
 
     # I don't think this will be useful

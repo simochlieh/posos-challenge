@@ -77,17 +77,16 @@ def extend_class(cls):
     return wrapper
 
 
-@extend_class(GridSearchCV)
-def write_results(self):
+def write_results(grid_search):
     timestamp = str(datetime.now()).split('.')[0].replace(':', '.').replace(' ', '_')
     os.mkdir('./results/%s' % timestamp)
 
     with open('./results/%s/info.txt' % timestamp, 'w+') as f:
         f.write('##############################################')
-        f.write('\nBest accuracy: %f' % (self.best_score_))
-        f.write('\nobtained with:\n' + str(self.best_params_))
-        f.write('\n\nAmong a 3 fold CV test on those params:\n' + str(self.param_grid))
+        f.write('\nBest accuracy: %f' % grid_search.best_score_)
+        f.write('\nobtained with:\n' + str(grid_search.best_params_))
+        f.write('\n\nAmong a 3 fold CV test on those params:\n' + str(grid_search.param_grid))
         f.write('\n\nWhole CV results in the pickle object.')
 
     with open('./results/%s/model.pkl' % timestamp, 'wb+') as f:
-        pickle.dump(self, f)
+        pickle.dump(grid_search, f)
