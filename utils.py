@@ -3,8 +3,6 @@ from datetime import datetime
 from sklearn.model_selection import GridSearchCV
 import pickle
 import pandas
-from tabulate import tabulate
-
 
 def create_dir(path):
     directory = os.path.dirname(path)
@@ -79,7 +77,6 @@ def extend_class(cls):
 
     return wrapper
 
-
 @extend_class(GridSearchCV)
 def write_results(self):
     timestamp = str(datetime.now()).split('.')[0].replace(':', '.').replace(' ', '_')
@@ -87,7 +84,7 @@ def write_results(self):
 
     with open('./results/%s/info.txt' % timestamp, 'w+') as f:
         f.write('##############################################')
-        f.write('\nBest accuracy: %f' % (self.best_score_))
+        f.write('\nBest accuracy: %f' % self.best_score_)
         f.write('\nobtained with:\n' + str(self.best_params_))
         f.write('\n\nAmong a 3 fold CV test on those params:\n' + str(self.param_grid))
         f.write('\n\nWhole CV results in the pickle object.')

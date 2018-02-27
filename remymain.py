@@ -46,15 +46,15 @@ def main(_args):
     ratios = {k: int(counter[k] - (counter[k] - numpy.mean(list(counter.values()))) * 0.2) for k in counter.keys()}
 
     # Bring objects in
-    toke = Tokenizer()
-    vecto = TfidfVectorizer()
+    toke = Tokenizer(n_clusters=1)
+    vecto = TfidfVectorizer(max_df=1.0)
     smote = Balance(ratio=ratios)
     fexKBest = SelectKBest(chi2, k=1500)
     fexModel = SelectFromModel(LinearSVC(C=0.1, dual=False, penalty='l2'))
     pca = TruncatedSVD(n_components=500)
 
     clf = GradientBoostingClassifier(n_estimators=10, verbose=1, subsample=1.0, max_depth=3)
-    xgb = XGBClassifier(n_estimators=100, max_depth=5, objective='multi:softmax', silent=False, n_jobs=3)
+    xgb = XGBClassifier(n_estimators=30, max_depth=6, objective='multi:softmax', silent=True, n_jobs=3)
 
     # Stack it all in a pipeline
     cachedir = mkdtemp()
@@ -63,8 +63,8 @@ def main(_args):
                       [('toke', toke),
                        ('vecto', vecto),
                        ('smote', smote),
-                       ('pca', pca),
-                       # ('fex', fexKBest),
+                       # ('pca', pca),
+                       ('fex', fexKBest),
                        ('clf', xgb)
                        ],
                       memory=memory
@@ -76,9 +76,9 @@ def main(_args):
         {
             'toke__n_clusters': [1],
             'toke__max_df': [0.3],
-            'vecto__max_df': [0.3],
-            'pca': [TruncatedSVD(n_components=500)],
-            'clf__n_estimators': [100],
+            'vecto__max_df': [1.0],
+            # 'pca': [TruncatedSVD(n_components=500)],
+            'clf__n_estimators': [30],
             # 'clf__max_depth': [2, 3],
             # 'fex': [None, SelectKBest(chi2, k=200), SelectKBest(chi2, k=500), SelectKBest(chi2, k=1500)],
             # 'fex__estimator__C': [1, 10, 20],
