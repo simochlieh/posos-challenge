@@ -9,6 +9,8 @@ from bs4 import BeautifulSoup
 import numpy as np
 from tempfile import mkdtemp
 from shutil import rmtree
+
+from nltk.stem.snowball import FrenchStemmer
 from sklearn.externals.joblib import Memory
 from sklearn.cluster import KMeans
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -167,6 +169,7 @@ def complete(df):
 class Tokenizer(TfidfVectorizer, KMeans):
 
     def __init__(self, verbose=0, do_clustering=True, n_clusters=20, max_df=0.1):
+        self.stemmer = FrenchStemmer()
         self._descriptions = pandas.read_csv('./results/indications')
         self.do_clustering = do_clustering
         KMeans.__init__(self, n_clusters=n_clusters)
@@ -185,7 +188,7 @@ class Tokenizer(TfidfVectorizer, KMeans):
             if self._verbose > 0:
                 print('Fitting tokenizer…')
 
-            TfidfVectorizer.fit(self, raw_documents=self._descriptions.descriptions, y=y)
+            TfidfVectorizer.fit(self, raw_documents=self._descriptions.descriptions)
 
     def transform(self, df, **kwargs):
         if self.do_clustering:
@@ -207,7 +210,7 @@ class Tokenizer(TfidfVectorizer, KMeans):
         if self._verbose > 0:
             print('Drugs mapped…')
 
-        def replace_in_sentence(row, mapping=mapping):
+        def replace_in_sentence(row, stemmer, mapping=mapping):
             try:
                 positions = row['drug_ids'].split(',')
             except AttributeError:
@@ -220,7 +223,12 @@ class Tokenizer(TfidfVectorizer, KMeans):
             except AttributeError:
                 drug_names = []
 
-            replacement = [' '.join(word_tokenize(mapping.get(unidecode(n)))) for n in drug_names]
+            if self.do_clustering:
+                replacement = [mapping.get(unidecode(n)) for n in drug_names]
+            else:
+                replacement = [' '.join([stemmer.stem(word) for word in word_tokenize(mapping.get(unidecode(n)))
+                                         if re.match('(\w)+', word)])
+                               for n in drug_names]
 
             sentence = row[params.CORR_LEMM_SENTENCE_COL].strip().split(' ')
 
@@ -229,13 +237,14 @@ class Tokenizer(TfidfVectorizer, KMeans):
                     map(lambda t: t[1] if t[0] not in positions else replacement.pop(0), enumerate(sentence)))
             else:
                 tokenized_sentence = ' '.join(sentence + replacement).lower()
+                # print(replacement)
                 # print(tokenized_sentence)
             return tokenized_sentence
 
         sentences = []
         loop = df.iterrows() if self._verbose == 0 else tqdm.tqdm(df.iterrows())
         for _, row in loop:
-            c = replace_in_sentence(row)
+            c = replace_in_sentence(row, stemmer=self.stemmer)
             sentences.append(c)
 
         # Delete description attribute for memory consumption
