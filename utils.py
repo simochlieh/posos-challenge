@@ -72,6 +72,9 @@ def get_labels_path():
 def get_tokenized_drugs_path(label):
     return '%sdrug_tokenizer/%s/input_train' % (get_results_path(), label)
 
+def get_embedding_dim():
+    return 300
+
 
 def extend_class(cls):
     def wrapper(f):

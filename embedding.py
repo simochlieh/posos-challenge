@@ -12,7 +12,7 @@ from shutil import rmtree
 
 from nltk.stem.snowball import FrenchStemmer
 from sklearn.externals.joblib import Memory
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, AgglomerativeClustering, DBSCAN
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
 from sklearn.model_selection import GridSearchCV
@@ -166,49 +166,26 @@ def complete(df):
 # It can be fully integrated in sklearn's pipeline (see main for test), GridSearchCV is functional and works
 # properly.
 
-class Tokenizer(TfidfVectorizer, KMeans):
+class Tokenizer(Pipeline):
 
-    def __init__(self, verbose=0, do_clustering=True, n_clusters=20, max_df=0.1):
+    def __init__(self, do_clustering=True):
         self.stemmer = FrenchStemmer()
         self._descriptions = pandas.read_csv('./results/indications')
         self.do_clustering = do_clustering
-        KMeans.__init__(self, n_clusters=n_clusters)
-        TfidfVectorizer.__init__(self, max_df=max_df)
-        self._verbose = verbose
+        self._verbose = 0
 
-    def fit(self, df, y=None):
-        if self.do_clustering:
-            # df is here the full dataframe with sentences, drugs_names etc
-            try:
-                if set(df.drug_names.unique()) < set(self._descriptions.drug_names):
-                    raise Exception('Some drugs are not in the description file.')
-            except ValueError:
-                print('Dimensions mismatch, probably the description file is not the right one.')
+        super(Tokenizer, self).__init__(steps=[('vecto', TfidfVectorizer()), ('cluster', DBSCAN(metric='cosine'))])
 
-            if self._verbose > 0:
-                print('Fitting tokenizer…')
+    def fit(self, X, y=None):
+        super(Tokenizer, self).fit(self._descriptions.descriptions)
 
-            TfidfVectorizer.fit(self, raw_documents=self._descriptions.descriptions)
+    def transform(self, X):
 
-    def transform(self, df, **kwargs):
-        if self.do_clustering:
-            vectorized = TfidfVectorizer.transform(self, raw_documents=self._descriptions.descriptions)
+        labels = self.steps[-1][1].labels_
 
-            KMeans.fit(self, X=vectorized)
+        tokens = list(map(lambda l: 'TOKEN_' + str(l), labels))
 
-            labels = KMeans.predict(self, X=vectorized)
-
-            if self._verbose > 0:
-                print('Labelling drugs…')
-
-            tokens = list(map(lambda l: 'TOKEN_' + str(l), labels))
-
-            mapping = dict(zip(self._descriptions.drug_names, tokens))
-        else:
-            mapping = dict(zip(self._descriptions.drug_names, self._descriptions.descriptions))
-
-        if self._verbose > 0:
-            print('Drugs mapped…')
+        mapping = dict(zip(self._descriptions.drug_names, tokens))
 
         def replace_in_sentence(row, stemmer, mapping=mapping):
             try:
@@ -242,16 +219,13 @@ class Tokenizer(TfidfVectorizer, KMeans):
             return tokenized_sentence
 
         sentences = []
-        loop = df.iterrows() if self._verbose == 0 else tqdm.tqdm(df.iterrows())
+        loop = X.iterrows() if self._verbose == 0 else tqdm.tqdm(X.iterrows())
         for _, row in loop:
             c = replace_in_sentence(row, stemmer=self.stemmer)
             sentences.append(c)
 
-        # Delete description attribute for memory consumption
-        # del self._descriptions
-
         return np.array(sentences)
 
-    def fit_transform(self, df, y=None):
-        self.fit(df, y=y)
-        return self.transform(df)
+    def fit_transform(self, X, y=None):
+        self.fit(X, y=y)
+        return self.transform(X)

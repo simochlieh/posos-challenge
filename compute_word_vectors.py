@@ -70,22 +70,22 @@ class FastTextEmbedding:
             sentences_list.append(sentence_embedding)
 
             # Updating max_sentence_length
-            sentence_length = len(sentence_embedding)
-            if sentence_length > max_sentence_length:
-                max_sentence_length = sentence_length
+            # sentence_length = len(sentence_embedding)
+            # if sentence_length > max_sentence_length:
+            #     max_sentence_length = sentence_length
 
         # Padding sentence matrices with 0 vectors
-        text_embedding = []
-        for sentence_embedding in sentences_list:
-            sentence_length = len(sentence_embedding)
-            sentence_embedding.extend([np.zeros((EMBEDDING_SIZE,))] * (max_sentence_length - sentence_length))
-            text_embedding.append(sentence_embedding)
+        # text_embedding = []
+        # for sentence_embedding in sentences_list:
+        #     sentence_length = len(sentence_embedding)
+        #     sentence_embedding.extend([np.zeros((EMBEDDING_SIZE,))] * (max_sentence_length - sentence_length))
+        #     text_embedding.append(sentence_embedding)
 
         # Deleting list of sentences
-        del sentences_list
+        # del sentences_list
 
-        embeddings = np.array(text_embedding)
-        print("\nSaving text embedding of shape (%s, %s, %s)" % embeddings.shape)
+        embeddings = np.array(sentences_list)
+        # print("\nSaving text embedding of shape (%s, %s, %s)" % embeddings.shape)
 
         if save_path:
             np.save(save_path, embeddings)

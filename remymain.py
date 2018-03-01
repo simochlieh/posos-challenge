@@ -20,7 +20,8 @@ import argparse
 import pandas
 import numpy
 from sklearn.linear_model import Lasso
-from sklearn.svm import LinearSVC
+from sklearn.svm import SVC
+from sklearn.cluster import AgglomerativeClustering
 from xgboost import XGBClassifier
 
 from utils import *
@@ -46,26 +47,27 @@ def main(_args):
     ratios = {k: int(counter[k] - (counter[k] - numpy.mean(list(counter.values()))) * 0.2) for k in counter.keys()}
 
     # Bring objects in
-    toke = Tokenizer(n_clusters=1)
+    toke = Tokenizer()
     vecto = TfidfVectorizer(max_df=1.0)
-    smote = Balance(ratio=ratios)
-    fexKBest = SelectKBest(chi2, k=1500)
-    fexModel = SelectFromModel(LinearSVC(C=0.1, dual=False, penalty='l2'))
-    pca = TruncatedSVD(n_components=500)
+    # smote = Balance(ratio=ratios)
+    # fexKBest = SelectKBest(chi2, k=1500)
+    # fexModel = SelectFromModel(LinearSVC(C=0.1, dual=False, penalty='l2'))
+    # pca = TruncatedSVD(n_components=500)
 
-    clf = GradientBoostingClassifier(n_estimators=10, verbose=1, subsample=1.0, max_depth=3)
-    xgb = XGBClassifier(n_estimators=30, max_depth=6, objective='multi:softmax', silent=True, n_jobs=3)
+    # clf = GradientBoostingClassifier(n_estimators=10, verbose=1, subsample=1.0, max_depth=3)
+    # xgb = XGBClassifier(n_estimators=30, max_depth=6, objective='multi:softmax', silent=True, n_jobs=3)
+    svm = SVC()
 
     # Stack it all in a pipeline
     cachedir = mkdtemp()
-    memory = Memory(cachedir=cachedir, verbose=1)
+    memory = Memory(cachedir=cachedir, verbose=0)
     pipe = MyPipeline(steps=
                       [('toke', toke),
                        ('vecto', vecto),
-                       ('smote', smote),
+                       # ('smote', smote),
                        # ('pca', pca),
-                       ('fex', fexKBest),
-                       ('clf', xgb)
+                       # ('fex', fexKBest),
+                       ('svm', svm)
                        ],
                       memory=memory
                       )
@@ -74,17 +76,19 @@ def main(_args):
     # One dict is one grid to go through.
     params_grid = [
         {
-            'toke__n_clusters': [1],
-            'toke__max_df': [0.3],
+            'toke__cluster__eps': [0.3, 0.5, 0.8],
+            'toke__vecto__max_df': [0.3],
             'vecto__max_df': [1.0],
-            # 'pca': [TruncatedSVD(n_components=500)],
-            'clf__n_estimators': [30],
+            # 'pca': [None],
+            # 'clf__n_estimators': [30],
             # 'clf__max_depth': [2, 3],
-            # 'fex': [None, SelectKBest(chi2, k=200), SelectKBest(chi2, k=500), SelectKBest(chi2, k=1500)],
+            # 'fex': [None],
             # 'fex__estimator__C': [1, 10, 20],
             # 'fex__threshold': ["mean"],
             # 'fex__k': [1500],
-            'smote': [None]
+            # 'smote': [None],
+            'svm__C': [50],
+            'svm__gamma': [0.01]
         }
     ]
 
@@ -96,8 +100,3 @@ def main(_args):
     print(GSCV.best_score_)
     print(GSCV.best_params_)
     rmtree(cachedir)
-
-
-if __name__ == '__main__':
-    args = parser.parse_args()
-    main(args)
