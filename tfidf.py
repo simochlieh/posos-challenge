@@ -60,7 +60,6 @@ class MyVectorizer(TfidfVectorizer):
         # TODO: investigate KeyError exceptions
         try:
             if not self.is_sparse:
-                print(True)
                 out = out.toarray()
         except KeyError:
             pass
@@ -71,7 +70,8 @@ class MyVectorizer(TfidfVectorizer):
             print('Fitting and Transforming...')
         self.fit(sentences, y, **kwargs)
         out = self.transform(sentences, **kwargs)
-        print(type(out))
+        # print(out.shape)
+        # print(self.stop_words_)
         return out
 
     # I don't think this will be useful

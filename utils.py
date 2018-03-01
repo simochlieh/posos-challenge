@@ -1,7 +1,8 @@
 import os
 from datetime import datetime
-from sklearn.model_selection import GridSearchCV
 import pickle
+import pandas as pnd
+import params
 
 
 def create_dir(path):
@@ -18,9 +19,9 @@ def get_results_path():
     return 'results/'
 
 
-def get_corr_lemm_path(label):
-    return '%scorr_lemm/%s/input_train' % (get_results_path(),
-                                           label)
+def get_corr_lemm_path(label, test=False):
+    return '%scorr_lemm/%s/input_%s' % (get_results_path(),
+                                        label, 'train' if not test else 'test')
 
 
 def binary_search(array, element):
@@ -74,6 +75,7 @@ def get_tokenized_drugs_path(label):
 def extend_class(cls):
     def wrapper(f):
         return setattr(cls, f.__name__, f) or f
+
     return wrapper
 
 
@@ -90,3 +92,14 @@ def write_results(grid_search):
 
     with open('./results/%s/model.pkl' % timestamp, 'wb+') as f:
         pickle.dump(grid_search, f)
+
+
+def to_csv(predictions, filepath):
+    create_dir(filepath)
+    input_test = pnd.read_csv(params.INPUT_TEST_FILENAME, sep=';')
+    df = pnd.DataFrame(columns=['ID', 'intention'])
+    df['ID'] = input_test['ID']
+    print(df)
+    df = df.set_index('ID')
+    df['intention'] = predictions
+    df.to_csv(filepath)
