@@ -70,6 +70,7 @@ LABELS_COL = 'intention'
 #################################################
 # Keras parameters
 #################################################
+EMBEDDING_LOC = 'https://s3.eu-west-3.amazonaws.com/posos-challenge/fast_text_embedding.npy'
 BATCH_SIZE = 50
 STEPS_PER_EPOCH = 8028 // BATCH_SIZE
 CLASSES = list(range(51))
