@@ -1,6 +1,7 @@
 import pandas as pnd
 import re
 from fastText import FastText
+from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from unidecode import unidecode
 import numpy as np
@@ -10,28 +11,30 @@ import params
 import utils
 
 MODEL_PATH = './wiki.fr/wiki.fr.bin'
-EMBEDDING_FILEPATH = './results/embedding/fast_text_embedding.npy'
+EMBEDDING_DIRPATH = './results/embedding/small_fast_text_embedding/'
 STOP_WORDS_FILEPATH = './data/stopwords-fr.txt'
 DRUG_REPLACEMENT = 'médicament'
-EMBEDDING_SIZE = 300
-COMPUTE_STOP_WORDS = True  # otherwise we  read them from the file above
+COMPUTE_STOP_WORDS = False  # otherwise we  read them from the file above
 STOP_WORDS_TFIDF_MAX_DF = 0.1  # this is the max_df parameter for the TFIDF used to compute the stop words
 
 
 class FastTextEmbedding:
-    def __init__(self, sentences, drug_names_set, model_path, stop_words=None, do_correction=False, verbose=False):
+    def __init__(self, sentences, y, drug_names_set, model_path, stop_words=None, do_correction=False, verbose=False):
+        assert len(sentences) == len(y), "List of sentences and y have different lengths. len(sentences) = %d, " \
+                                         "len(y) = %d" % (len(sentences), len(y))
         self.sentences = sentences
+        self.y = y
         self.model_path = model_path
         self.do_correction = do_correction
         self.drug_names_set = drug_names_set
         self.verbose = verbose
         self.stop_words = stop_words
 
-    def run(self, save_path=None):
+    def run(self, save_directory=None):
         """
 
-        :param save_path: filepath where we save the text embedding
-        :type save_path: str
+        :param save_directory: filepath where we save the text embedding
+        :type save_directory: str
         :return: A 3d-array matrix storing the text embedding.
             The matrix is of shape (nb_sentences, max_sentence_length, embedding_size)
         """
@@ -40,7 +43,6 @@ class FastTextEmbedding:
         model = FastText.load_model(MODEL_PATH)
 
         sentences_list = []
-        max_sentence_length = 0
 
         for sentence in tqdm(self.sentences, desc='Embedding words for each sentence...', disable=not self.verbose):
             sentence_embedding = []
@@ -74,16 +76,17 @@ class FastTextEmbedding:
 
             sentences_list.append(sentence_embedding)
 
-            # Updating max_sentence_length
-            # sentence_length = len(sentence_embedding)
-            # if sentence_length > max_sentence_length:
-            #     max_sentence_length = sentence_length
-
-        # Padding sentence matrices with 0 vectors
+        #     # Updating max_sentence_length
+        #     sentence_length = len(sentence_embedding)
+        #     if sentence_length > max_sentence_length:
+        #         max_sentence_length = sentence_length
+        #
+        # # Padding sentence matrices with 0 vectors
         # text_embedding = []
         # for sentence_embedding in sentences_list:
         #     sentence_length = len(sentence_embedding)
-        #     sentence_embedding.extend([np.zeros((EMBEDDING_SIZE,))] * (max_sentence_length - sentence_length))
+        #     sentence_embedding.extend([np.zeros((utils.get_embedding_dim(),))] \
+        #                               * (max_sentence_length - sentence_length))
         #     text_embedding.append(sentence_embedding)
         #
         # # Deleting list of sentences
@@ -92,16 +95,21 @@ class FastTextEmbedding:
         embeddings = np.array(sentences_list)
         print("\nSaving text embedding of shape %s" % str(embeddings.shape))
 
-        if save_path:
-            np.save(save_path, embeddings)
+        X_train, X_test, y_train, y_test = train_test_split(embeddings, self.y, test_size=0.2, random_state=42)
+
+        if save_directory:
+            np.save(utils.get_X_train_path(save_directory), X_train)
+            np.save(utils.get_X_test_path(save_directory), X_test)
+            np.save(utils.get_y_train_path(save_directory), y_train)
+            np.save(utils.get_y_test_path(save_directory), y_test)
 
         return embeddings
 
 
 if __name__ == '__main__':
     input_train = pnd.read_csv(params.INPUT_TRAIN_FILENAME, sep=';')
-    input_test = pnd.read_csv(params.INPUT_TEST_FILENAME, sep=';')
-    input_data = pnd.concat([input_train, input_test])
+    # input_test = pnd.read_csv(params.INPUT_TEST_FILENAME, sep=';')
+    y = pnd.read_csv(utils.get_labels_path(), sep=';')
 
     drug_names_path = utils.get_drug_names_path()
     drug_names_df = pnd.read_csv(drug_names_path)
@@ -112,7 +120,8 @@ if __name__ == '__main__':
     if COMPUTE_STOP_WORDS:
         print("stop words: %s" % ', '.join(stop_words))
 
-    fast_text_embedding = FastTextEmbedding(input_train.question, drug_names_set=drug_names_set, stop_words=stop_words,
+    fast_text_embedding = FastTextEmbedding(input_train.question, y.intention,
+                                            drug_names_set=drug_names_set, stop_words=stop_words,
                                             model_path=MODEL_PATH, do_correction=True, verbose=True)
-    utils.create_dir(EMBEDDING_FILEPATH)
-    fast_text_embedding.run(save_path=EMBEDDING_FILEPATH)
+    utils.create_dir(EMBEDDING_DIRPATH)
+    fast_text_embedding.run(save_directory=EMBEDDING_DIRPATH)

@@ -71,13 +71,3 @@ LABELS_COL = 'intention'
 # Keras parameters
 #################################################
 EMBEDDING_LOC = 'https://s3.eu-west-3.amazonaws.com/posos-challenge/fast_text_embedding.npy'
-BATCH_SIZE = 50
-STEPS_PER_EPOCH = 8028 // BATCH_SIZE
-CLASSES = list(range(51))
-
-# CAn not set multithreading with batch generator.
-keras_fit_params = {'epochs': 1,
-                    'steps_per_epoch': STEPS_PER_EPOCH,
-                    'verbose': 2,
-                    'use_multiprocessing': False,
-                    'workers': 1}

@@ -6,6 +6,7 @@ import pandas as pnd
 import params
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import GridSearchCV
+import numpy as np
 
 
 def create_dir(path):
@@ -79,15 +80,9 @@ def get_embedding_dim():
     return 300
 
 
-def get_max_sent_length():
-    return 100
-
-
 def extend_class(cls):
     def wrapper(f):
         return setattr(cls, f.__name__, f) or f
-
-    return wrapper
 
     return wrapper
 
@@ -138,3 +133,24 @@ def compute_stop_words(sentences, max_df):
     tfidf = TfidfVectorizer(max_df=max_df)
     tfidf.fit(sentences)
     return tfidf.stop_words_
+
+
+def get_X_train_path(dir):
+    return os.path.join(dir, 'X_train.npy')
+
+
+def get_y_train_path(dir):
+    return os.path.join(dir, 'y_train.npy')
+
+
+def get_X_test_path(dir):
+    return os.path.join(dir, 'X_test.npy')
+
+
+def get_y_test_path(dir):
+    return os.path.join(dir, 'y_test.npy')
+
+
+def get_shape(npy_file):
+    npy = np.load(npy_file)
+    return npy.shape
