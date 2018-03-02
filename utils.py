@@ -6,6 +6,7 @@ import pandas as pnd
 import params
 from sklearn.model_selection import GridSearchCV
 
+
 def create_dir(path):
     directory = os.path.dirname(path)
     if not os.path.exists(directory):
@@ -72,16 +73,23 @@ def get_labels_path():
 def get_tokenized_drugs_path(label):
     return '%sdrug_tokenizer/%s/input_train' % (get_results_path(), label)
 
+
 def get_embedding_dim():
     return 300
+
+
+def get_max_sent_length():
+    return 100
 
 
 def extend_class(cls):
     def wrapper(f):
         return setattr(cls, f.__name__, f) or f
+
     return wrapper
 
     return wrapper
+
 
 @extend_class(GridSearchCV)
 def write_results(self):
@@ -115,4 +123,3 @@ def to_csv(predictions, filepath):
     df = df.set_index('ID')
     df['intention'] = predictions
     df.to_csv(filepath)
-
