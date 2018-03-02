@@ -5,22 +5,27 @@ from tqdm import tqdm
 from unidecode import unidecode
 import numpy as np
 
+
 import params
 import utils
 
 MODEL_PATH = './wiki.fr/wiki.fr.bin'
 EMBEDDING_FILEPATH = './results/embedding/fast_text_embedding.npy'
+STOP_WORDS_FILEPATH = './data/stopwords-fr.txt'
 DRUG_REPLACEMENT = 'médicament'
 EMBEDDING_SIZE = 300
+COMPUTE_STOP_WORDS = True  # otherwise we  read them from the file above
+STOP_WORDS_TFIDF_MAX_DF = 0.1  # this is the max_df parameter for the TFIDF used to compute the stop words
 
 
 class FastTextEmbedding:
-    def __init__(self, sentences, drug_names_set, model_path, do_correction=False, verbose=False):
+    def __init__(self, sentences, drug_names_set, model_path, stop_words=None, do_correction=False, verbose=False):
         self.sentences = sentences
         self.model_path = model_path
         self.do_correction = do_correction
         self.drug_names_set = drug_names_set
         self.verbose = verbose
+        self.stop_words = stop_words
 
     def run(self, save_path=None):
         """
@@ -43,7 +48,7 @@ class FastTextEmbedding:
             splits = FastText.tokenize(sentence)
             for word in splits:
                 # Skipping non-words
-                if not re.match('(\w)+', word):
+                if not re.match('(\w)+', word) or word in self.stop_words:
                     continue
 
                 # Getting rid of the apostrophe and taking the following word
@@ -73,19 +78,19 @@ class FastTextEmbedding:
             sentence_length = len(sentence_embedding)
             if sentence_length > max_sentence_length:
                 max_sentence_length = sentence_length
+        #
+        # # Padding sentence matrices with 0 vectors
+        # text_embedding = []
+        # for sentence_embedding in sentences_list:
+        #     sentence_length = len(sentence_embedding)
+        #     sentence_embedding.extend([np.zeros((EMBEDDING_SIZE,))] * (max_sentence_length - sentence_length))
+        #     text_embedding.append(sentence_embedding)
+        #
+        # # Deleting list of sentences
+        # del sentences_list
 
-        # Padding sentence matrices with 0 vectors
-        text_embedding = []
-        for sentence_embedding in sentences_list:
-            sentence_length = len(sentence_embedding)
-            sentence_embedding.extend([np.zeros((EMBEDDING_SIZE,))] * (max_sentence_length - sentence_length))
-            text_embedding.append(sentence_embedding)
-
-        # Deleting list of sentences
-        del sentences_list
-
-        embeddings = np.array(text_embedding)
-        print("\nSaving text embedding of shape (%s, %s, %s)" % embeddings.shape)
+        embeddings = np.array(sentences_list)
+        print("\nSaving text embedding of shape %s" % str(embeddings.shape))
 
         if save_path:
             np.save(save_path, embeddings)
@@ -102,7 +107,12 @@ if __name__ == '__main__':
     drug_names_df = pnd.read_csv(drug_names_path)
     drug_names_set = set(drug_names_df[params.DRUG_NAME_COL])
 
-    fast_text_embedding = FastTextEmbedding(input_train.question, drug_names_set=drug_names_set,
+    stop_words = utils.compute_stop_words(input_train.question, max_df=STOP_WORDS_TFIDF_MAX_DF) if COMPUTE_STOP_WORDS \
+        else utils.get_stop_words(STOP_WORDS_FILEPATH)
+    if COMPUTE_STOP_WORDS:
+        print("stop words: %s" % ', '.join(stop_words))
+
+    fast_text_embedding = FastTextEmbedding(input_train.question, drug_names_set=drug_names_set, stop_words=stop_words,
                                             model_path=MODEL_PATH, do_correction=True, verbose=True)
     utils.create_dir(EMBEDDING_FILEPATH)
     fast_text_embedding.run(save_path=EMBEDDING_FILEPATH)
