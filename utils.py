@@ -1,9 +1,11 @@
 import os
 from datetime import datetime
 import pickle
+import pandas
 import pandas as pnd
 import params
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import GridSearchCV
 
 
 def create_dir(path):
@@ -73,26 +75,44 @@ def get_tokenized_drugs_path(label):
     return '%sdrug_tokenizer/%s/input_train' % (get_results_path(), label)
 
 
+def get_embedding_dim():
+    return 300
+
+
+def get_max_sent_length():
+    return 100
+
+
 def extend_class(cls):
     def wrapper(f):
         return setattr(cls, f.__name__, f) or f
 
     return wrapper
 
+    return wrapper
 
-def write_results(grid_search):
+
+@extend_class(GridSearchCV)
+def write_results(self):
     timestamp = str(datetime.now()).split('.')[0].replace(':', '.').replace(' ', '_')
     os.mkdir('./results/%s' % timestamp)
 
     with open('./results/%s/info.txt' % timestamp, 'w+') as f:
         f.write('##############################################')
-        f.write('\nBest accuracy: %f' % grid_search.best_score_)
-        f.write('\nobtained with:\n' + str(grid_search.best_params_))
-        f.write('\n\nAmong a 3 fold CV test on those params:\n' + str(grid_search.param_grid))
+        f.write('\nBest accuracy: %f' % self.best_score_)
+        f.write('\nobtained with:\n' + str(self.best_params_))
+        f.write('\n\nAmong a 3 fold CV test on those params:\n' + str(self.param_grid))
         f.write('\n\nWhole CV results in the pickle object.')
 
     with open('./results/%s/model.pkl' % timestamp, 'wb+') as f:
-        pickle.dump(grid_search, f)
+        pickle.dump(self, f)
+
+
+def load_data():
+    input_train = pandas.read_csv(get_corr_lemm_path('final'))
+    y_train = pandas.read_csv('/Users/remydubois/Desktop/posos/y_train.csv', sep=';').intention.values
+
+    return input_train, y_train
 
 
 def to_csv(predictions, filepath):

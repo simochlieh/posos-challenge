@@ -75,11 +75,11 @@ class FastTextEmbedding:
             sentences_list.append(sentence_embedding)
 
             # Updating max_sentence_length
-            sentence_length = len(sentence_embedding)
-            if sentence_length > max_sentence_length:
-                max_sentence_length = sentence_length
-        #
-        # # Padding sentence matrices with 0 vectors
+            # sentence_length = len(sentence_embedding)
+            # if sentence_length > max_sentence_length:
+            #     max_sentence_length = sentence_length
+
+        # Padding sentence matrices with 0 vectors
         # text_embedding = []
         # for sentence_embedding in sentences_list:
         #     sentence_length = len(sentence_embedding)

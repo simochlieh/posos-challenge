@@ -1,3 +1,5 @@
+regex==2018.2.8
+matplotlib==2.1.2
 appnope==0.1.0
 beautifulsoup4==4.6.0
 bleach==1.5.0
@@ -28,7 +30,6 @@ jupyter-core==4.4.0
 lxml==4.1.1
 Markdown==2.6.11
 MarkupSafe==1.0
-matplotlib==2.1.2
 mistune==0.8.3
 nbconvert==5.3.1
 nbformat==4.4.0
@@ -61,7 +62,6 @@ pyuca==1.2
 PyYAML==3.12
 pyzmq==16.0.4
 qtconsole==4.3.1
-regex==2018.2.8
 requests==2.18.4
 roman==2.0.0
 scikit-learn==0.19.1
