@@ -27,6 +27,7 @@ from PyPDF2 import PdfFileReader
 from pathlib2 import Path
 import time
 from nltk import word_tokenize
+import pickle
 
 import params
 from utils import get_results_path
@@ -35,6 +36,8 @@ from fastText import FastText
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 FORBIDDEN_INDICATIONS = [" Pas d'indication thérapeutique "]
+
+DRUG_EMBEDDING_DIRPATH = '%s/embedding/drug_embeddings.pkl' % get_results_path()
 
 
 def scrape_pdf(url):
@@ -238,14 +241,15 @@ def embedde_drugs(indications):
     if not type(indications) == pandas.DataFrame:
         raise ValueError('Input should be a df of drug names and descriptions.')
     # Check if an embedding file was  started
-    embedded_drugs_file = '%s/embedding/drugs_embedding.csv' % get_results_path()
 
-    if Path(embedded_drugs_file).is_file():
+    if Path(DRUG_EMBEDDING_DIRPATH).is_file():
         print('Description file found.')
-        existing_embeddings = pandas.read_csv(embedded_drugs_file, index_col=0)
+        with open(DRUG_EMBEDDING_DIRPATH, 'rb') as f:
+            existing_embeddings = pickle.load(f)
+
     else:
         print('No description file found… Creating description file.')
-        existing_embeddings = pandas.DataFrame(columns=['drug_names', 'embedding'])
+        existing_embeddings = {}
 
     # Read in the drug names from indications as it has been completed by the test file. Replace NFs by médicament.
     indications.descriptions = indications['descriptions'].apply(lambda s: s.replace('NF', 'médicament'))
@@ -254,15 +258,16 @@ def embedde_drugs(indications):
     # vecto = TfidfVectorizer(max_df=0.3)
     # vectorized = vecto.fit_transform(indications.descriptions)
 
-    model = FastText.load_model('./wiki.fr/wiki.fr.bin')
-    embeddings = []
-    remainings = list(set(indications.drug_names) - set(existing_embeddings.drug_names))
-    for d in tqdm.tqdm(indications[indications.drug_names.isin(remainings)].descriptions, desc='embedding…'):
-        embeddings.append(model.get_sentence_vector(d.lower()))
+    # model = FastText.load_model('./wiki.fr/wiki.fr.bin')
+    remainings = list(set(indications.drug_names) - set(existing_embeddings.keys()))
+    for d in tqdm.tqdm(indications[indications.drug_names.isin(remainings)].itertuples(), desc='embedding…'):
+        existing_embeddings.update({d.drug_names: model.get_sentence_vector(d.descriptions.lower())})
 
-    add = pandas.DataFrame(data=[[n, e] for (n, e) in zip(remainings, embeddings)], columns=indications.columns)
 
-    indications.append(add, ignore_index=True)
-    out = indications.drop('descriptions', axis=1)
+    with open(DRUG_EMBEDDING_DIRPATH, 'wb') as f:
+        pickle.dump(existing_embeddings, f)
 
-    out.to_csv(embedded_drugs_file, index=True)
+
+if __name__ == '__main__':
+    indications = pandas.read_csv('./results/indications', index_col=0)
+    embedde_drugs(indications)

@@ -177,7 +177,7 @@ def main(_args):
     remove_blacklisted_words_from_dict(params.FR_DICT_BLACKLIST)
     requirements()
 
-    input_data = read_raw_input(params.INPUT_TRAIN_FILENAME, sep=';', max_lines=int(_args.max_lines))
+    input_data = pnd.read_csv(params.INPUT_TRAIN_FILENAME, sep=';')
 
     drug_names_path = utils.get_drug_names_path()
     if not os.path.exists(drug_names_path):

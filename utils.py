@@ -4,7 +4,9 @@ import pickle
 import pandas
 import pandas as pnd
 import params
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import GridSearchCV
+import numpy as np
 
 
 def create_dir(path):
@@ -24,6 +26,10 @@ def get_results_path():
 def get_corr_lemm_path(label, test=False):
     return '%scorr_lemm/%s/input_%s' % (get_results_path(),
                                         label, 'train' if not test else 'test')
+
+
+def get_max_sent_length():
+    return 300
 
 
 def binary_search(array, element):
@@ -78,15 +84,9 @@ def get_embedding_dim():
     return 300
 
 
-def get_max_sent_length():
-    return 100
-
-
 def extend_class(cls):
     def wrapper(f):
         return setattr(cls, f.__name__, f) or f
-
-    return wrapper
 
     return wrapper
 
@@ -123,3 +123,38 @@ def to_csv(predictions, filepath):
     df = df.set_index('ID')
     df['intention'] = predictions
     df.to_csv(filepath)
+
+
+def get_stop_words(filepath):
+    stop_words = []
+    with open(filepath, encoding=params.UTF_8) as f:
+        for line in f:
+            stop_words.append(line.strip())
+    return stop_words
+
+
+def compute_stop_words(sentences, max_df):
+    tfidf = TfidfVectorizer(max_df=max_df)
+    tfidf.fit(sentences)
+    return tfidf.stop_words_
+
+
+def get_X_train_path(dir):
+    return os.path.join(dir, 'X_train.npy')
+
+
+def get_y_train_path(dir):
+    return os.path.join(dir, 'y_train.npy')
+
+
+def get_X_test_path(dir):
+    return os.path.join(dir, 'X_test.npy')
+
+
+def get_y_test_path(dir):
+    return os.path.join(dir, 'y_test.npy')
+
+
+def get_shape(npy_file):
+    npy = np.load(npy_file)
+    return npy.shape

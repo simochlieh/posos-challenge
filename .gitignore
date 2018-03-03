@@ -1,2 +1,9 @@
 .*
 data/
+Untitled.ipynb
+results/
+lib/
+fastText/
+wiki.fr/
+__*
+logs/
