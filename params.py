@@ -76,8 +76,8 @@ STEPS_PER_EPOCH = 8028 // BATCH_SIZE
 CLASSES = list(range(51))
 
 # CAn not set multithreading with batch generator.
-keras_fit_params = {'epochs': 1,
+keras_fit_params = {'epochs': 10,
                     'steps_per_epoch': STEPS_PER_EPOCH,
-                    'verbose': 2,
+                    'verbose': 0,
                     'use_multiprocessing': False,
                     'workers': 1}

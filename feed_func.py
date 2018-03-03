@@ -4,7 +4,7 @@ from compute_word_vectors import EMBEDDING_FILEPATH
 import pandas
 import time
 from keras.utils import to_categorical
-from params import BATCH_SIZE
+from params import BATCH_SIZE, STEPS_PER_EPOCH
 
 
 def batch_generator(batch_size=BATCH_SIZE, max_sent_length=get_max_sent_length()):
@@ -16,8 +16,8 @@ def batch_generator(batch_size=BATCH_SIZE, max_sent_length=get_max_sent_length()
     # """
     # First croppe the dataset in order to make it a round number of batches:
     l = numpy.load(EMBEDDING_FILEPATH)
-    X = list(map(lambda s: numpy.stack(s[:max_sent_length]), l))
-    Y = pandas.read_csv(get_labels_path(), sep=';').intention.values
+    X = list(map(lambda s: numpy.stack(s[:max_sent_length]), l[:-1000]))
+    Y = pandas.read_csv(get_labels_path(), sep=';').intention.values[:-1000]
 
     #def batcher():
     """
@@ -40,7 +40,7 @@ def batch_generator(batch_size=BATCH_SIZE, max_sent_length=get_max_sent_length()
 
     # Loops indefinitely, as precised in https://keras.io/models/sequential/
     while True:
-        bound = i
+        bound = i % (STEPS_PER_EPOCH)
         sl = slice(bound, bound + batch_size)
 
         mats = X[sl]

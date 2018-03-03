@@ -29,6 +29,8 @@ import time
 from nltk import word_tokenize
 
 import params
+from utils import get_results_path
+from fastText import FastText
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
@@ -103,7 +105,7 @@ def grab_indications(ide):
 
 def complete(df):
     # Check for existing description file:
-    description_file = './results/indications'
+    description_file = '%s/indications' % get_results_path()
     # If an existing description file is found, then open it in order to complete it, otherwise create a new empty dataframe.
     if Path(description_file).is_file():
         print('Description file found.')
@@ -229,3 +231,38 @@ class Tokenizer(Pipeline):
     def fit_transform(self, X, y=None):
         self.fit(X, y=y)
         return self.transform(X)
+
+
+def embedde_drugs(indications):
+    # drugs is here a list of drug names
+    if not type(indications) == pandas.DataFrame:
+        raise ValueError('Input should be a df of drug names and descriptions.')
+    # Check if an embedding file was  started
+    embedded_drugs_file = '%s/embedding/drugs_embedding.csv' % get_results_path()
+
+    if Path(embedded_drugs_file).is_file():
+        print('Description file found.')
+        existing_embeddings = pandas.read_csv(embedded_drugs_file, index_col=0)
+    else:
+        print('No description file found… Creating description file.')
+        existing_embeddings = pandas.DataFrame(columns=['drug_names', 'embedding'])
+
+    # Read in the drug names from indications as it has been completed by the test file. Replace NFs by médicament.
+    indications.descriptions = indications['descriptions'].apply(lambda s: s.replace('NF', 'médicament'))
+
+    # Now perform tfidf in order to weight the embedding for each word in each description
+    # vecto = TfidfVectorizer(max_df=0.3)
+    # vectorized = vecto.fit_transform(indications.descriptions)
+
+    model = FastText.load_model('./wiki.fr/wiki.fr.bin')
+    embeddings = []
+    remainings = list(set(indications.drug_names) - set(existing_embeddings.drug_names))
+    for d in tqdm.tqdm(indications[indications.drug_names.isin(remainings)].descriptions, desc='embedding…'):
+        embeddings.append(model.get_sentence_vector(d.lower()))
+
+    add = pandas.DataFrame(data=[[n, e] for (n, e) in zip(remainings, embeddings)], columns=indications.columns)
+
+    indications.append(add, ignore_index=True)
+    out = indications.drop('descriptions', axis=1)
+
+    out.to_csv(embedded_drugs_file, index=True)
