@@ -29,7 +29,11 @@ def get_corr_lemm_path(label, test=False):
 
 
 def get_max_sent_length():
-    return 300
+    return 100
+
+
+def get_embedding_dirpath():
+    return '%sembedding/small_fast_text_embedding/' % get_results_path()
 
 
 def binary_search(array, element):

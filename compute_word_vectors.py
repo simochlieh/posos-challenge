@@ -9,10 +9,8 @@ import pickle
 
 import params
 import utils
-from embedding import DRUG_EMBEDDING_DIRPATH
 
 MODEL_PATH = './wiki.fr/wiki.fr.bin'
-EMBEDDING_DIRPATH = './results/embedding/small_fast_text_embedding/'
 STOP_WORDS_FILEPATH = './data/stopwords-fr.txt'
 DRUG_REPLACEMENT = 'médicament'
 COMPUTE_STOP_WORDS = False  # otherwise we  read them from the file above
@@ -46,7 +44,7 @@ class FastTextEmbedding:
         sentences_list = []
 
         try:
-            with open(DRUG_EMBEDDING_DIRPATH, 'rb') as f:
+            with open(utils.get_embedding_dirpath(), 'rb') as f:
                 drug_embeddings = pickle.load(f)
         except FileNotFoundError:
                 print('Drugs will be embedded as "médicament".')
@@ -84,7 +82,10 @@ class FastTextEmbedding:
                         word = suggestions[0]
 
                 # Embedding
-                sentence_embedding.append(model.get_word_vector(word))
+                try:
+                    sentence_embedding.append(model.get_word_vector(word))
+                except NameError:
+                    print('Uncomment line 44, model unloaded yet (5gig RAM required).')
 
             sentences_list.append(sentence_embedding)
 
@@ -135,5 +136,5 @@ if __name__ == '__main__':
     fast_text_embedding = FastTextEmbedding(input_train.question, y.intention,
                                             drug_names_set=drug_names_set, stop_words=stop_words,
                                             model_path=MODEL_PATH, do_correction=True, verbose=True)
-    utils.create_dir(EMBEDDING_DIRPATH)
-    fast_text_embedding.run(save_directory=EMBEDDING_DIRPATH)
+    utils.create_dir(utils.get_embedding_dirpath())
+    fast_text_embedding.run(save_directory=utils.get_embedding_dirpath())

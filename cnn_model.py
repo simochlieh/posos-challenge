@@ -1,20 +1,22 @@
-import math
-import numpy as np
-from keras.layers import Dense, Conv2D, MaxPooling2D, Dropout, Flatten, concatenate
-from keras.utils.np_utils import to_categorical
-from keras.layers import Input
-from keras.optimizers import SGD, Adam
+from keras.layers import Dense, Conv2D, MaxPooling2D, Dropout, Flatten, concatenate, GRU, Input, BatchNormalization
+from keras.layers.core import Reshape
+from keras.optimizers import Adam
 from keras.models import Model
 from feed_func import *
 from params import keras_fit_params, CLASSES, TEST_STEPS_PER_EPOCH
-from keras.callbacks import TensorBoard
 import utils
 from tensorboard_callback import MyTensorBoard
+import os
+from keras.callbacks import TensorBoard
+import argparse
 
-EMBEDDING_DIRPATH = './results/embedding/small_fast_text_embedding/'
+parser = argparse.ArgumentParser(description="This script runs the main experiments.")
 
+parser.add_argument('--regularization',
+                    default=None,
+                    help="Should regularization method between DO and/or BN")
 
-def cnn_model_output(input_, num_filters, filter_sizes, embedding_size, max_sentence_length):
+def cnn_model_output(input_, num_filters, filter_sizes, embedding_size, max_sentence_length, drop=0.8, regu=None):
     conv_0 = Conv2D(num_filters, (filter_sizes[0], embedding_size), padding='valid', activation='relu', name='conv_0')(
         input_)
     conv_1 = Conv2D(num_filters, (filter_sizes[1], embedding_size), padding='valid', activation='relu', name='conv_1')(
@@ -28,50 +30,62 @@ def cnn_model_output(input_, num_filters, filter_sizes, embedding_size, max_sent
 
     merged_tensor = concatenate([maxpool_0, maxpool_1, maxpool_2], axis=1)
     flatten = Flatten(name='flatten')(merged_tensor)
-    # dropout = Dropout(drop)(flatten)
+    if regu is not None:
+        if 'BN' in regu:
+            flatten = BatchNormalization(axis=-1)(flatten)
+        if 'DO' in regu:
+            flatten = Dropout(drop)(flatten)
     return Dense(len(CLASSES), activation='softmax', name='predictions')(flatten)
 
 
-def main():
-    # Loading training data
-    # input_train = np.load(utils.get_X_train_path(EMBEDDING_DIRPATH))
-    # y_train = np.load(utils.get_y_train_path(EMBEDDING_DIRPATH))
-    # input_test = np.load(utils.get_X_test_path(EMBEDDING_DIRPATH))
-    # y_test = np.load(utils.get_y_test_path(EMBEDDING_DIRPATH))
+def rnn_model_output(input_, drop=0.8, regu=None):
+    # input_ = Reshape((BATCH_SIZE, get_max_sent_length(), get_embedding_dim()))(input_)
+    rec = GRU(150)(input_)
+    dense1 = Dense(80)(rec)
+    if regu is not None:
+        if 'BN' in regu:
+            dense1 = BatchNormalization(axis=-1)(dense1)
+        if 'DO' in regu:
+            dense1 = Dropout(drop)(dense1)
+    dense2 = Dense(len(CLASSES), activation='softmax', name='predictions')(dense1)
 
+    return dense2
+
+
+def main(_args):
     # Hyper-parameters
     filter_sizes = [3, 4, 5]
     num_filters = 8
-    # nb_training_examples = input_train.shape[0]
-    # nb_test_examples = input_test.shape[0]
-    # steps_per_epoch = math.ceil(nb_training_examples / batch_size)
-    # validation_steps = math.ceil(nb_test_examples / batch_size)
-    # embedding_dim = utils.get_embedding_dim()
-    # max_sentence_length = 100
-    # nb_epochs = 20
 
-    input_ = Input(shape=(utils.get_max_sent_length(), utils.get_embedding_dim(), 1))
+    input_ = Input(shape=(utils.get_max_sent_length(), utils.get_embedding_dim()))
 
-    output = cnn_model_output(input_, num_filters, filter_sizes, utils.get_embedding_dim(),
-                              utils.get_max_sent_length())
+    # output = cnn_model_output(input_, num_filters, filter_sizes, utils.get_embedding_dim(),
+    #                          utils.get_max_sent_length(), regu=_args.regularization)
+    output = rnn_model_output(input_)
     model = Model(input_, output)
 
     # Compile
     adam = Adam(lr=1e-4, beta_1=0.9, beta_2=0.999, epsilon=1e-08)
     model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['acc'])
 
+    # Prompt user to type in location for the logdir
+    loc = input("Type in specification for log dir name:")
     # Callbacks for tensorboard
-    tb = MyTensorBoard(log_dir='./logdir', histogram_freq=1, write_batch_performance=True)
+    logdir = './results/logdir/'+loc+'/'
+    tb = MyTensorBoard(log_dir=logdir, histogram_freq=0, write_batch_performance=True)
 
+    # Call tensorboard
+    # os.system('tensorboard --logdir %s'%logdir)
 
     # Fit on generator
     model.fit_generator(
-        generator=batch_generator(set='train'),
+        generator=batch_generator(set='train', n_channels=0),
         callbacks=[tb],
-        validation_data=batch_generator(set='test'),
-        validation_steps=10,
+        validation_data=batch_generator(set='test', n_channels=0),
+        validation_steps=TEST_STEPS_PER_EPOCH,
         **keras_fit_params)
 
 
 if __name__ == '__main__':
-    main()
+    args = parser.parse_args()
+    main(args)

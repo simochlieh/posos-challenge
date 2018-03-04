@@ -5,6 +5,7 @@
 
 from enchant import Dict
 import numpy as np
+import math
 
 #################################################
 # TF-IDF parameters
@@ -72,8 +73,8 @@ LABELS_COL = 'intention'
 #################################################
 EMBEDDING_LOC = 'https://s3.eu-west-3.amazonaws.com/posos-challenge/fast_text_embedding.npy'
 BATCH_SIZE = 50
-TRAIN_STEPS_PER_EPOCH = 6422 // BATCH_SIZE
-TEST_STEPS_PER_EPOCH = (8028 - 6422) // BATCH_SIZE
+TRAIN_STEPS_PER_EPOCH = math.ceil(6422 / BATCH_SIZE)
+TEST_STEPS_PER_EPOCH = math.ceil((8028 - 6422) / BATCH_SIZE)
 CLASSES = list(range(51))
 
 # CAn not set multithreading with batch generator.
