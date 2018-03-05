@@ -29,7 +29,7 @@ def get_corr_lemm_path(label, test=False):
 
 
 def get_drug_embedding_path():
-    return '%sembedding/drugs_embedding.csv' % get_results_path()
+    return '%sembedding/drug_embeddings.pkl' % get_results_path()
 
 
 def binary_search(array, element):
