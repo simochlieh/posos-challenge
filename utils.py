@@ -28,8 +28,8 @@ def get_corr_lemm_path(label, test=False):
                                         label, 'train' if not test else 'test')
 
 
-def get_max_sent_length():
-    return 300
+def get_drug_embedding_path():
+    return '%sembedding/drugs_embedding.csv' % get_results_path()
 
 
 def binary_search(array, element):

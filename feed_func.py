@@ -1,15 +1,13 @@
+import math
 import numpy
-from utils import get_embedding_dim, get_labels_path, get_max_sent_length
-import pandas
+from utils import get_embedding_dim
 import time
 from keras.utils import to_categorical
-from params import BATCH_SIZE, TRAIN_STEPS_PER_EPOCH
-
-EMBEDDING_FILEPATH = './results/embedding/fast_text_embedding_wo_stop_words/'
 
 
-def batch_generator(input_data, y, batch_size, max_sent_length):
+def batch_generator(input_data, y, batch_size, max_sent_length, n_channels=1):
     X = list(map(lambda s: numpy.stack(s[:max_sent_length]), input_data))
+    steps_per_epoch = math.ceil(len(X) / batch_size)
 
     """
     Yields embedded sentences in matrices of shape (max_sent_length, embedding_size, 1)
@@ -18,8 +16,7 @@ def batch_generator(input_data, y, batch_size, max_sent_length):
 
     # Loops indefinitely, as precised in https://keras.io/models/sequential/
     while True:
-        bound = i % TRAIN_STEPS_PER_EPOCH
-        sl = slice(bound, bound + batch_size)
+        sl = slice(i * batch_size, (i + 1) * batch_size)
 
         mats = X[sl]
         y_batch = y[sl]
@@ -27,14 +24,16 @@ def batch_generator(input_data, y, batch_size, max_sent_length):
         # pad all the matrices (sentences) one by one.
         e = get_embedding_dim()
         for k, m in enumerate(mats):
-            mats[k] = numpy.vstack((mats[k], numpy.zeros(((max_sent_length - m.shape[0]), e)))) \
-                .reshape(max_sent_length, e, 1)
+            mats[k] = numpy.vstack((mats[k], numpy.zeros(((max_sent_length - m.shape[0]), e))))
+            if n_channels > 0:
+                mats[k] = mats[k].reshape(max_sent_length, e, n_channels)
 
         # Now stack em all in a 3D tensor of shape (batch_size, sent_length, embedding_size)
         batch = numpy.array(mats)
 
         # Avoid storing too large numbers by modulo.
-        i = (i + batch_size) % len(X)
+
+        i = (i + 1) % steps_per_epoch
 
         # Reshape y
         y_keras = to_categorical(y_batch, num_classes=51)

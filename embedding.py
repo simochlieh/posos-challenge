@@ -30,14 +30,12 @@ from nltk import word_tokenize
 import pickle
 
 import params
-from utils import get_results_path
+from utils import get_results_path, get_drug_embedding_path
 from fastText import FastText
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 FORBIDDEN_INDICATIONS = [" Pas d'indication thérapeutique "]
-
-DRUG_EMBEDDING_DIRPATH = '%s/embedding/drug_embeddings.pkl' % get_results_path()
 
 
 def scrape_pdf(url):
@@ -242,9 +240,9 @@ def embedde_drugs(indications):
         raise ValueError('Input should be a df of drug names and descriptions.')
     # Check if an embedding file was  started
 
-    if Path(DRUG_EMBEDDING_DIRPATH).is_file():
+    if Path(get_drug_embedding_path()).is_file():
         print('Description file found.')
-        with open(DRUG_EMBEDDING_DIRPATH, 'rb') as f:
+        with open(get_drug_embedding_path(), 'rb') as f:
             existing_embeddings = pickle.load(f)
 
     else:
@@ -260,11 +258,12 @@ def embedde_drugs(indications):
 
     # model = FastText.load_model('./wiki.fr/wiki.fr.bin')
     remainings = list(set(indications.drug_names) - set(existing_embeddings.keys()))
-    for d in tqdm.tqdm(indications[indications.drug_names.isin(remainings)].itertuples(), desc='embedding…'):
-        existing_embeddings.update({d.drug_names: model.get_sentence_vector(d.descriptions.lower())})
-
-
-    with open(DRUG_EMBEDDING_DIRPATH, 'wb') as f:
+    try:
+        for d in tqdm.tqdm(indications[indications.drug_names.isin(remainings)].itertuples(), desc='embedding…'):
+            existing_embeddings.update({d.drug_names: model.get_sentence_vector(d.descriptions.lower())})
+    except NameError:
+        print('Model not loaded yet, uncomment line 259 to do so (5gig RAM required).')
+    with open(get_drug_embedding_path(), 'wb') as f:
         pickle.dump(existing_embeddings, f)
 
 

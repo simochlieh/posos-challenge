@@ -4,7 +4,6 @@
 # Proceed to various experiments
 
 from enchant import Dict
-import numpy as np
 
 #################################################
 # TF-IDF parameters
@@ -71,3 +70,4 @@ LABELS_COL = 'intention'
 # Keras parameters
 #################################################
 EMBEDDING_LOC = 'https://s3.eu-west-3.amazonaws.com/posos-challenge/fast_text_embedding.npy'
+CLASSES = list(range(51))

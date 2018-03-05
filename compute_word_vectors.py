@@ -9,10 +9,9 @@ import pickle
 
 import params
 import utils
-from embedding import DRUG_EMBEDDING_DIRPATH
 
 MODEL_PATH = './wiki.fr/wiki.fr.bin'
-EMBEDDING_DIRPATH = './results/embedding/small_fast_text_embedding/'
+EMBEDDING_DIRPATH = './results/embedding/fast_text_embedding_wo_stop_words/'
 STOP_WORDS_FILEPATH = './data/stopwords-fr.txt'
 DRUG_REPLACEMENT = 'médicament'
 COMPUTE_STOP_WORDS = False  # If False we  read them from the file above
@@ -44,12 +43,13 @@ class FastTextEmbedding:
         if self.verbose:
             print("Loading FastText model...")
         model = FastText.load_model(MODEL_PATH)
+        drug_embedding_path = utils.get_drug_embedding_path()
 
         sentences_list = []
 
         if self.drug_description_embedding:
             try:
-                with open(DRUG_EMBEDDING_DIRPATH, 'rb') as f:
+                with open(drug_embedding_path, 'rb') as f:
                     drug_embeddings = pickle.load(f)
             except FileNotFoundError:
                     self.drug_description_embedding = False
