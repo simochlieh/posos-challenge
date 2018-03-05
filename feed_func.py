@@ -1,19 +1,13 @@
+import math
 import numpy
-from utils import get_embedding_dim, get_max_sent_length, get_embedding_dirpath
-import pandas
+from utils import get_embedding_dim
 import time
 from keras.utils import to_categorical
-from params import BATCH_SIZE, TRAIN_STEPS_PER_EPOCH, TEST_STEPS_PER_EPOCH
 
 
-def batch_generator(set='train', n_channels=1, batch_size=BATCH_SIZE, max_sent_length=get_max_sent_length()):
-    valid = ['train', 'test']
-    if set not in valid:
-        raise ValueError('"set" should be one of %s.'%', '.join(valid))
-
-    l = numpy.load(get_embedding_dirpath() + 'X_%s.npy' % set)
-    X = list(map(lambda s: numpy.stack(s[:max_sent_length]), l))
-    y = numpy.load(get_embedding_dirpath() + '/y_%s.npy' % set)
+def batch_generator(input_data, y, batch_size, max_sent_length, n_channels=1):
+    X = list(map(lambda s: numpy.stack(s[:max_sent_length]), input_data))
+    steps_per_epoch = math.ceil(len(X) / batch_size)
 
     """
     Yields embedded sentences in matrices of shape (max_sent_length, embedding_size, 1)
@@ -38,7 +32,8 @@ def batch_generator(set='train', n_channels=1, batch_size=BATCH_SIZE, max_sent_l
         batch = numpy.array(mats)
 
         # Avoid storing too large numbers by modulo.
-        i = (i + 1) % (TRAIN_STEPS_PER_EPOCH if set=='train' else TEST_STEPS_PER_EPOCH)
+
+        i = (i + 1) % steps_per_epoch
 
         # Reshape y
         y_keras = to_categorical(y_batch, num_classes=51)

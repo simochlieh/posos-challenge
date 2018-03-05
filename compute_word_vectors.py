@@ -11,14 +11,16 @@ import params
 import utils
 
 MODEL_PATH = './wiki.fr/wiki.fr.bin'
+EMBEDDING_DIRPATH = './results/embedding/fast_text_embedding_wo_stop_words/'
 STOP_WORDS_FILEPATH = './data/stopwords-fr.txt'
 DRUG_REPLACEMENT = 'médicament'
-COMPUTE_STOP_WORDS = False  # otherwise we  read them from the file above
+COMPUTE_STOP_WORDS = False  # If False we  read them from the file above
 STOP_WORDS_TFIDF_MAX_DF = 0.1  # this is the max_df parameter for the TFIDF used to compute the stop words
 
 
 class FastTextEmbedding:
-    def __init__(self, sentences, y, drug_names_set, model_path, stop_words=None, do_correction=False, verbose=False):
+    def __init__(self, sentences, y, drug_names_set, model_path, drug_description_embedding=True,
+                 stop_words=None, do_correction=False, verbose=False):
         assert len(sentences) == len(y), "List of sentences and y have different lengths. len(sentences) = %d, " \
                                          "len(y) = %d" % (len(sentences), len(y))
         self.sentences = sentences
@@ -28,6 +30,7 @@ class FastTextEmbedding:
         self.drug_names_set = drug_names_set
         self.verbose = verbose
         self.stop_words = stop_words
+        self.drug_description_embedding = drug_description_embedding
 
     def run(self, save_directory=None):
         """
@@ -39,17 +42,21 @@ class FastTextEmbedding:
         """
         if self.verbose:
             print("Loading FastText model...")
-        # model = FastText.load_model(MODEL_PATH)
+        model = FastText.load_model(MODEL_PATH)
+        drug_embedding_path = utils.get_drug_embedding_path()
 
         sentences_list = []
 
-        try:
-            with open(utils.get_embedding_dirpath(), 'rb') as f:
-                drug_embeddings = pickle.load(f)
-        except FileNotFoundError:
-                print('Drugs will be embedded as "médicament".')
+        if self.drug_description_embedding:
+            try:
+                with open(drug_embedding_path, 'rb') as f:
+                    drug_embeddings = pickle.load(f)
+            except FileNotFoundError:
+                    self.drug_description_embedding = False
+                    print('Drugs will be embedded as "médicament".')
 
-        for sentence in tqdm(self.sentences, desc='Embedding words for each sentence...', disable=not self.verbose):
+        for i, sentence in tqdm(enumerate(self.sentences), desc='Embedding words for each sentence...',
+                                disable=not self.verbose, total=len(self.sentences)):
             sentence_embedding = []
             sentence = sentence.lower()
             splits = FastText.tokenize(sentence)
@@ -68,11 +75,14 @@ class FastTextEmbedding:
                 # Dealing with the drug name
                 if unidecode(word) in self.drug_names_set:
                     # TODO: try something more complex
-                    try:
-                        emb_w = drug_embeddings[word]
-                        sentence_embedding.append(emb_w)
-                        continue
-                    except KeyError:
+                    if self.drug_description_embedding and drug_embeddings:
+                        try:
+                            emb_w = drug_embeddings[word]
+                            sentence_embedding.append(emb_w)
+                            continue
+                        except KeyError:
+                            word = DRUG_REPLACEMENT
+                    else:
                         word = DRUG_REPLACEMENT
 
                 # Correcting words
@@ -82,12 +92,12 @@ class FastTextEmbedding:
                         word = suggestions[0]
 
                 # Embedding
-                try:
-                    sentence_embedding.append(model.get_word_vector(word))
-                except NameError:
-                    print('Uncomment line 44, model unloaded yet (5gig RAM required).')
-
-            sentences_list.append(sentence_embedding)
+                sentence_embedding.append(model.get_word_vector(word))
+            if sentence_embedding:
+                sentences_list.append(sentence_embedding)
+            else:
+                print("Warning: Found an empty sentence embedding. Ignoring.")
+                del self.y[i]
 
         #     # Updating max_sentence_length
         #     sentence_length = len(sentence_embedding)
@@ -133,8 +143,8 @@ if __name__ == '__main__':
     if COMPUTE_STOP_WORDS:
         print("stop words: %s" % ', '.join(stop_words))
 
-    fast_text_embedding = FastTextEmbedding(input_train.question, y.intention,
+    fast_text_embedding = FastTextEmbedding(input_train.question, y.intention, drug_description_embedding=False,
                                             drug_names_set=drug_names_set, stop_words=stop_words,
                                             model_path=MODEL_PATH, do_correction=True, verbose=True)
-    utils.create_dir(utils.get_embedding_dirpath())
-    fast_text_embedding.run(save_directory=utils.get_embedding_dirpath())
+    utils.create_dir(EMBEDDING_DIRPATH)
+    fast_text_embedding.run(save_directory=EMBEDDING_DIRPATH)

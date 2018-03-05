@@ -30,7 +30,7 @@ from nltk import word_tokenize
 import pickle
 
 import params
-from utils import get_results_path, get_embedding_dirpath
+from utils import get_results_path, get_drug_embedding_path
 from fastText import FastText
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -240,9 +240,9 @@ def embedde_drugs(indications):
         raise ValueError('Input should be a df of drug names and descriptions.')
     # Check if an embedding file was  started
 
-    if Path(get_embedding_dirpath()).is_file():
+    if Path(get_drug_embedding_path()).is_file():
         print('Description file found.')
-        with open(get_embedding_dirpath(), 'rb') as f:
+        with open(get_drug_embedding_path(), 'rb') as f:
             existing_embeddings = pickle.load(f)
 
     else:
@@ -263,7 +263,7 @@ def embedde_drugs(indications):
             existing_embeddings.update({d.drug_names: model.get_sentence_vector(d.descriptions.lower())})
     except NameError:
         print('Model not loaded yet, uncomment line 259 to do so (5gig RAM required).')
-    with open(get_embedding_dirpath(), 'wb') as f:
+    with open(get_drug_embedding_path(), 'wb') as f:
         pickle.dump(existing_embeddings, f)
 
 
