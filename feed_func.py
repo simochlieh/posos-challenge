@@ -5,13 +5,11 @@ import time
 from keras.utils import to_categorical
 from params import BATCH_SIZE, TRAIN_STEPS_PER_EPOCH
 
-EMBEDDING_FILEPATH = './results/embedding/small_fast_text_embedding/'
+EMBEDDING_FILEPATH = './results/embedding/fast_text_embedding_wo_stop_words/'
 
 
-def batch_generator(set='train', batch_size=BATCH_SIZE, max_sent_length=get_max_sent_length()):
-    l = numpy.load(EMBEDDING_FILEPATH+'X_%s.npy'%set)
-    X = list(map(lambda s: numpy.stack(s[:max_sent_length]), l))
-    y = numpy.load(EMBEDDING_FILEPATH+'/y_%s.npy'%set)
+def batch_generator(input_data, y, batch_size, max_sent_length):
+    X = list(map(lambda s: numpy.stack(s[:max_sent_length]), input_data))
 
     """
     Yields embedded sentences in matrices of shape (max_sent_length, embedding_size, 1)

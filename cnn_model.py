@@ -11,7 +11,7 @@ from keras.callbacks import TensorBoard
 import utils
 from tensorboard_callback import MyTensorBoard
 
-EMBEDDING_DIRPATH = './results/embedding/small_fast_text_embedding/'
+EMBEDDING_DIRPATH = './results/embedding/fast_text_embedding_wo_stop_words/'
 
 
 def cnn_model_output(input_, num_filters, filter_sizes, embedding_size, max_sentence_length):
@@ -34,23 +34,24 @@ def cnn_model_output(input_, num_filters, filter_sizes, embedding_size, max_sent
 
 def main():
     # Loading training data
-    # input_train = np.load(utils.get_X_train_path(EMBEDDING_DIRPATH))
-    # y_train = np.load(utils.get_y_train_path(EMBEDDING_DIRPATH))
-    # input_test = np.load(utils.get_X_test_path(EMBEDDING_DIRPATH))
-    # y_test = np.load(utils.get_y_test_path(EMBEDDING_DIRPATH))
+    input_train = np.load(utils.get_X_train_path(EMBEDDING_DIRPATH))
+    y_train = np.load(utils.get_y_train_path(EMBEDDING_DIRPATH))
+    input_test = np.load(utils.get_X_test_path(EMBEDDING_DIRPATH))
+    y_test = np.load(utils.get_y_test_path(EMBEDDING_DIRPATH))
 
     # Hyper-parameters
     filter_sizes = [3, 4, 5]
     num_filters = 8
-    # nb_training_examples = input_train.shape[0]
-    # nb_test_examples = input_test.shape[0]
-    # steps_per_epoch = math.ceil(nb_training_examples / batch_size)
-    # validation_steps = math.ceil(nb_test_examples / batch_size)
-    # embedding_dim = utils.get_embedding_dim()
-    # max_sentence_length = 100
-    # nb_epochs = 20
+    batch_size = 50
+    nb_training_examples = input_train.shape[0]
+    nb_test_examples = input_test.shape[0]
+    steps_per_epoch = math.ceil(nb_training_examples / batch_size)
+    validation_steps = math.ceil(nb_test_examples / batch_size)
+    embedding_dim = utils.get_embedding_dim()
+    max_sentence_length = 100
+    nb_epochs = 10
 
-    input_ = Input(shape=(utils.get_max_sent_length(), utils.get_embedding_dim(), 1))
+    input_ = Input(shape=(max_sentence_length, embedding_dim, 1))
 
     output = cnn_model_output(input_, num_filters, filter_sizes, utils.get_embedding_dim(),
                               utils.get_max_sent_length())
@@ -63,14 +64,20 @@ def main():
     # Callbacks for tensorboard
     tb = MyTensorBoard(log_dir='./logdir', histogram_freq=1, write_batch_performance=True)
 
-
     # Fit on generator
     model.fit_generator(
-        generator=batch_generator(set='train'),
+        generator=batch_generator(input_data=input_train, y=y_train,
+                                  batch_size=batch_size, max_sent_length=max_sentence_length),
+        steps_per_epoch=steps_per_epoch,
         callbacks=[tb],
-        validation_data=batch_generator(set='test'),
-        validation_steps=10,
-        **keras_fit_params)
+        validation_data=batch_generator(input_data=input_test, y=y_test,
+                                        batch_size=batch_size, max_sent_length=max_sentence_length),
+        validation_steps=validation_steps,
+        epochs=nb_epochs,
+        verbose=2,
+        use_multiprocessing=False,
+        workers=1
+    )
 
 
 if __name__ == '__main__':
