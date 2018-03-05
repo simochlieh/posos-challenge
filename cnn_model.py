@@ -16,7 +16,7 @@ parser.add_argument('--regularization',
                     help="Should regularization method between DO and/or BN")
 
 parser.add_argument('--embedding_dir_path',
-                    default='./results/embedding/fast_text_embedding_wo_stop_words/',
+                    default='./results/embedding/small_fast_text_embedding/',
                     help="Directory storing X_train.py, y_train.py, X_tst.py, y_test.py")
 
 
@@ -43,6 +43,7 @@ def cnn_model_output(input_, num_filters, filter_sizes, embedding_size, max_sent
 
 
 def rnn_model_output(input_, drop=0.8, regu=None):
+
     # input_ = Reshape((BATCH_SIZE, get_max_sent_length(), get_embedding_dim()))(input_)
     rec = GRU(150)(input_)
     dense1 = Dense(80)(rec)
@@ -54,6 +55,44 @@ def rnn_model_output(input_, drop=0.8, regu=None):
     dense2 = Dense(len(CLASSES), activation='softmax', name='predictions')(dense1)
 
     return dense2
+
+def rm_cnn(input_, num_filters, filter_sizes, embedding_size, max_sentence_length, drop=0.6, regu=None):
+    conv_01 = Conv2D(num_filters[0], (filter_sizes[0][0], embedding_size), padding='valid', activation='relu',
+                     name='conv_01')(
+        input_)
+    conv_11 = Conv2D(num_filters[0], (filter_sizes[0][1], embedding_size), padding='valid', activation='relu',
+                     name='conv_11')(
+        input_)
+    conv_21 = Conv2D(num_filters[0], (filter_sizes[0][2], embedding_size), padding='valid', activation='relu',
+                     name='conv_21')(
+        input_)
+
+    maxpool_01 = MaxPooling2D((2, 1), name='maxpool_01')(conv_01)
+    maxpool_11 = MaxPooling2D((2, 1), name='maxpool_11')(conv_11)
+    maxpool_21 = MaxPooling2D((2, 1), name='maxpool_21')(conv_21)
+
+    conv_02 = Conv2D(num_filters[1], (filter_sizes[1][0], 1), padding='valid', activation='relu',
+                     name='conv_02')(
+        maxpool_01)
+    conv_12 = Conv2D(num_filters[1], (filter_sizes[1][1], 1), padding='valid', activation='relu',
+                     name='conv_12')(
+        maxpool_11)
+    conv_22 = Conv2D(num_filters[1], (filter_sizes[1][2], 1), padding='valid', activation='relu',
+                     name='conv_22')(
+        maxpool_21)
+
+    maxpool_02 = MaxPooling2D((2, 1), name='maxpool_02')(conv_02)
+    maxpool_12 = MaxPooling2D((2, 1), name='maxpool_12')(conv_12)
+    maxpool_22 = MaxPooling2D((2, 1), name='maxpool_22')(conv_22)
+
+    merged_tensor = concatenate([maxpool_02, maxpool_12, maxpool_22], axis=1)
+    flatten = Flatten(name='flatten')(merged_tensor)
+    if regu is not None:
+        if 'BN' in regu:
+            flatten = BatchNormalization(axis=-1)(flatten)
+        if 'DO' in regu:
+            flatten = Dropout(drop)(flatten)
+    return Dense(len(CLASSES), activation='softmax', name='predictions')(flatten)
 
 
 def main(args):
@@ -92,6 +131,8 @@ def main(args):
     # Callbacks for tensorboard
     logdir = './results/logdir/' + loc + '/'
     tb = MyTensorBoard(log_dir=logdir, histogram_freq=0, write_batch_performance=True)
+    # Checkpoint
+    # reduceLROnplateau
 
     # Fit on generator
     model.fit_generator(
