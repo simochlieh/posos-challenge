@@ -87,8 +87,8 @@ def main(args):
     model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['acc'])
 
     # Prompt user to type in location for the logdir
-    # loc = input("Type in specification for log dir name:")
-    loc = 'final'
+    loc = input("Type in specification for log dir name:")
+    # loc = 'final'
     # Callbacks for tensorboard
     logdir = './results/logdir/' + loc + '/'
     tb = MyTensorBoard(log_dir=logdir, histogram_freq=0, write_batch_performance=True)
