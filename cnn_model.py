@@ -1,4 +1,5 @@
-from keras.layers import Dense, Conv2D, MaxPooling2D, Dropout, Flatten, concatenate, GRU, Input, BatchNormalization
+from keras.layers import Dense, Conv2D, MaxPooling2D, Dropout, Flatten, concatenate, GRU, Input, BatchNormalization, \
+    Convolution1D, MaxPooling1D, Concatenate
 from keras.optimizers import Adam
 from keras.models import Model
 from feed_func import *
@@ -9,18 +10,19 @@ import argparse
 import numpy as np
 from params import CLASSES
 
+
 parser = argparse.ArgumentParser(description="This script runs the main experiments.")
 
 parser.add_argument('--regularization',
-                    default=None,
+                    default='BN',
                     help="Should regularization method between DO and/or BN")
 
 parser.add_argument('--embedding_dir_path',
-                    default='./results/embedding/small_fast_text_embedding/',
-                    help="Directory storing X_train.py, y_train.py, X_tst.py, y_test.py")
+                    default='./results/embedding/fast_text_embedding_top_100_tfidf_no_corr/',
+                    help="Directory storing X_train.py, y_train.py, X_test.py, y_test.py")
 
 
-def cnn_model_output(input_, num_filters, filter_sizes, embedding_size, max_sentence_length, drop=0.8, regu=None):
+def cnn_model_output(input_, num_filters, filter_sizes, embedding_size, max_sentence_length, drop=0.1, regu=None):
     conv_0 = Conv2D(num_filters, (filter_sizes[0], embedding_size), padding='valid', activation='relu', name='conv_0')(
         input_)
     conv_1 = Conv2D(num_filters, (filter_sizes[1], embedding_size), padding='valid', activation='relu', name='conv_1')(
@@ -39,6 +41,7 @@ def cnn_model_output(input_, num_filters, filter_sizes, embedding_size, max_sent
             flatten = BatchNormalization(axis=-1)(flatten)
         if 'DO' in regu:
             flatten = Dropout(drop)(flatten)
+    # flatten = Dense(256, activation='relu')(flatten)
     return Dense(len(CLASSES), activation='softmax', name='predictions')(flatten)
 
 
@@ -55,6 +58,7 @@ def rnn_model_output(input_, drop=0.8, regu=None):
     dense2 = Dense(len(CLASSES), activation='softmax', name='predictions')(dense1)
 
     return dense2
+
 
 def rm_cnn(input_, num_filters, filter_sizes, embedding_size, max_sentence_length, drop=0.6, regu=None):
     conv_01 = Conv2D(num_filters[0], (filter_sizes[0][0], embedding_size), padding='valid', activation='relu',
@@ -98,20 +102,34 @@ def rm_cnn(input_, num_filters, filter_sizes, embedding_size, max_sentence_lengt
 def main(args):
     # Loading training data
     input_train = np.load(utils.get_X_train_path(args.embedding_dir_path))
+    print(input_train.shape)
+    # std_train = input_train.std()
+    # mean_train = input_train.mean()
+
+    # input_train = (input_train - mean_train) / std_train
+    input_train = input_train[:, :, :, np.newaxis]
+
     y_train = np.load(utils.get_y_train_path(args.embedding_dir_path))
+    y_train = to_categorical(y_train, num_classes=len(CLASSES))
+
     input_test = np.load(utils.get_X_test_path(args.embedding_dir_path))
+    # input_test = (input_test - mean_train) / std_train
+    input_test = input_test[:, :, :, np.newaxis]
+
     y_test = np.load(utils.get_y_test_path(args.embedding_dir_path))
+    y_test = to_categorical(y_test, num_classes=len(CLASSES))
 
     # Hyper-parameters
-    filter_sizes = [3, 4, 5]
-    num_filters = 8
-    batch_size = 50
+    filter_sizes = [2, 3, 4, 5]
+    num_filters = 300
+    batch_size = 32
     nb_training_examples = input_train.shape[0]
     nb_test_examples = input_test.shape[0]
     steps_per_epoch = math.ceil(nb_training_examples / batch_size)
     validation_steps = math.ceil(nb_test_examples / batch_size)
     embedding_dim = utils.get_embedding_dim()
-    max_sentence_length = 100
+    max_sentence_length = max([len(sentence) for sentence in input_train])
+    print(max_sentence_length)
     nb_epochs = 10
 
     input_ = Input(shape=(max_sentence_length, embedding_dim, 1))
@@ -122,12 +140,12 @@ def main(args):
     model = Model(input_, output)
 
     # Compile
-    adam = Adam(lr=1e-2)
+    adam = Adam(lr=1e-4)
     model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['acc'])
 
     # Prompt user to type in location for the logdir
-    loc = input("Type in specification for log dir name:")
-    # loc = 'final'
+    # loc = input("Type in specification for log dir name:")
+    loc = 'final'
     # Callbacks for tensorboard
     logdir = './results/logdir/' + loc + '/'
     tb = MyTensorBoard(log_dir=logdir, histogram_freq=0, write_batch_performance=True)
@@ -135,19 +153,21 @@ def main(args):
     # reduceLROnplateau
 
     # Fit on generator
-    model.fit_generator(
-        generator=batch_generator(input_data=input_train, y=y_train,
-                                  batch_size=batch_size, max_sent_length=max_sentence_length),
-        steps_per_epoch=steps_per_epoch,
-        # callbacks=[tb],
-        validation_data=batch_generator(input_data=input_test, y=y_test,
-                                        batch_size=batch_size, max_sent_length=max_sentence_length),
-        validation_steps=validation_steps,
-        epochs=nb_epochs,
-        verbose=1,
-        use_multiprocessing=False,
-        workers=1
-    )
+    # model.fit_generator(
+    #     generator=batch_generator(input_data=input_train, y=y_train,
+    #                               batch_size=batch_size, max_sent_length=max_sentence_length),
+    #     steps_per_epoch=steps_per_epoch,
+    #     # callbacks=[tb],
+    #     validation_data=batch_generator(input_data=input_test, y=y_test,
+    #                                     batch_size=batch_size, max_sent_length=max_sentence_length),
+    #     validation_steps=validation_steps,
+    #     epochs=nb_epochs,
+    #     verbose=1,
+    #     use_multiprocessing=False,
+    #     workers=1
+    # )
+    model.fit(input_train, y_train, batch_size=batch_size, epochs=nb_epochs, validation_data=(input_test, y_test))
+    model.save('model_no_corr_100_first_tfidf.h5py')
 
 
 if __name__ == '__main__':

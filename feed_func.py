@@ -3,6 +3,7 @@ import numpy
 from utils import get_embedding_dim
 import time
 from keras.utils import to_categorical
+from sklearn.preprocessing import normalize
 
 
 def batch_generator(input_data, y, batch_size, max_sent_length, n_channels=1):
@@ -26,6 +27,7 @@ def batch_generator(input_data, y, batch_size, max_sent_length, n_channels=1):
         for k, m in enumerate(mats):
             mats[k] = numpy.vstack((mats[k], numpy.zeros(((max_sent_length - m.shape[0]), e))))
             if n_channels > 0:
+                # mats[k] = normalize(mats[k])
                 mats[k] = mats[k].reshape(max_sent_length, e, n_channels)
 
         # Now stack em all in a 3D tensor of shape (batch_size, sent_length, embedding_size)

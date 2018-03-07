@@ -158,3 +158,7 @@ def get_y_test_path(dir):
 def get_shape(npy_file):
     npy = np.load(npy_file)
     return npy.shape
+
+
+def get_drugs_indication_path():
+    return '%sindications' % get_results_path()
