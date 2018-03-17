@@ -8,7 +8,6 @@ from keras.utils import to_categorical
 def batch_generator(input_data, y, batch_size, max_sent_length, n_channels=1):
     X = list(map(lambda s: numpy.stack(s[:max_sent_length]), input_data))
     steps_per_epoch = math.ceil(len(X) / batch_size)
-
     """
     Yields embedded sentences in matrices of shape (max_sent_length, embedding_size, 1)
     """
