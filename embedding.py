@@ -234,7 +234,7 @@ class Tokenizer(Pipeline):
         return self.transform(X)
 
 
-def embedde_drugs(indications):
+def embedde_drugs(indications, model):
     # drugs is here a list of drug names
     if not type(indications) == pandas.DataFrame:
         raise ValueError('Input should be a df of drug names and descriptions.')
@@ -253,14 +253,19 @@ def embedde_drugs(indications):
     indications.descriptions = indications['descriptions'].apply(lambda s: s.replace('NF', 'médicament'))
 
     # Now perform tfidf in order to weight the embedding for each word in each description
-    # vecto = TfidfVectorizer(max_df=0.3)
-    # vectorized = vecto.fit_transform(indications.descriptions)
+    vecto = TfidfVectorizer(max_df=0.3)
+    vectorized = vecto.fit_transform(indications.descriptions)
+    index_to_words = {v: k for (k, v) in vecto.vocabulary_.items()}
 
     # model = FastText.load_model('./wiki.fr/wiki.fr.bin')
     remainings = list(set(indications.drug_names) - set(existing_embeddings.keys()))
     try:
-        for d in tqdm.tqdm(indications[indications.drug_names.isin(remainings)].itertuples(), desc='embedding…'):
-            existing_embeddings.update({d.drug_names: model.get_sentence_vector(d.descriptions.lower())})
+        for (i, d) in tqdm.tqdm(enumerate(indications[indications.drug_names.isin(remainings)].itertuples()),
+                                desc='embedding…'):
+            words_in_sentence = [index_to_words[j] for j in vectorized[i][vectorized[i] > 0]]
+            weights = {word: vectorized[i, vecto.vocabulary_[word]] for word in words_in_sentence}
+            embedding = np.sum([model.get_word_vector(word) * weights[word] for word in weights.keys()], axis=0)
+            existing_embeddings.update({d.drug_names: embedding})
     except NameError:
         print('Model not loaded yet, uncomment line 259 to do so (5gig RAM required).')
     with open(get_drug_embedding_path(), 'wb') as f:

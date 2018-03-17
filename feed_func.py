@@ -19,6 +19,7 @@ def batch_generator(input_data, y, batch_size, max_sent_length, n_channels=1):
         sl = slice(i * batch_size, (i + 1) * batch_size)
 
         mats = X[sl]
+        # max_sent_length = numpy.max([m.shape[0] for m in mats])
         y_batch = y[sl]
 
         # pad all the matrices (sentences) one by one.
