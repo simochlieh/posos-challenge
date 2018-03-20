@@ -1,13 +1,22 @@
 import math
 import numpy
-from utils import get_embedding_dim
+from utils import get_embedding_dim, get_parsing_dim
 import time
 from keras.utils import to_categorical
 
 
-def batch_generator(input_data, y, batch_size, max_sent_length, n_channels=1):
-    X = list(map(lambda s: numpy.stack(s[:max_sent_length]), input_data))
-    steps_per_epoch = math.ceil(len(X) / batch_size)
+def batch_generator(input_data, y, batch_size, max_sent_length, n_channels=1, length_bounds=None):
+    X = map(lambda s: numpy.stack(s[:max_sent_length]), input_data)
+
+    # Faster filtering here than filtering on the fly in the while loop.
+    if length_bounds is not None:
+        Xyl = filter(lambda t: min(length_bounds) <= len(t[0]) <= max(length_bounds), zip(X, y, range(len(y))))
+        X, y, steps = tuple(map(list, zip(*Xyl)))
+        steps_per_epoch = math.ceil(len(steps) / batch_size)
+    else:
+        X = list(X)
+        steps_per_epoch = math.ceil(len(X) / batch_size)
+
     """
     Yields embedded sentences in matrices of shape (max_sent_length, embedding_size, 1)
     """
@@ -22,7 +31,7 @@ def batch_generator(input_data, y, batch_size, max_sent_length, n_channels=1):
         y_batch = y[sl]
 
         # pad all the matrices (sentences) one by one.
-        e = get_embedding_dim()
+        e = get_embedding_dim() + get_parsing_dim()
         for k, m in enumerate(mats):
             mats[k] = numpy.vstack((mats[k], numpy.zeros(((max_sent_length - m.shape[0]), e))))
             if n_channels > 0:

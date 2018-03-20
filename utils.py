@@ -83,6 +83,8 @@ def get_tokenized_drugs_path(label):
 def get_embedding_dim():
     return 300
 
+def get_parsing_dim():
+    return 16
 
 def extend_class(cls):
     def wrapper(f):

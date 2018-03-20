@@ -1,6 +1,7 @@
-from keras.layers import Dense, Conv2D, MaxPooling2D, Dropout, Flatten, concatenate, GRU, Input, BatchNormalization
+from keras.layers import Dense, Conv2D, MaxPooling2D, Dropout, Flatten, concatenate, GRU, Input, BatchNormalization, \
+    Lambda, Reshape
 from keras.optimizers import Adam
-from keras.models import Model
+from keras.models import Model, load_model
 from feed_func import *
 import utils
 from tensorboard_callback import MyTensorBoard
@@ -8,6 +9,7 @@ from keras.callbacks import TensorBoard, ModelCheckpoint, ReduceLROnPlateau
 import argparse
 import numpy as np
 from params import CLASSES
+import os
 
 parser = argparse.ArgumentParser(description="This script runs the main experiments.")
 
@@ -16,29 +18,78 @@ parser.add_argument('--regularization',
                     help="Should regularization method between DO and/or BN")
 
 parser.add_argument('--embedding_dir_path',
-                    default='./results/embedding/small_fast_text_embedding/',
+                    default='./results/embedding/small_fast_text_embedding_wo_stop_words_parsed/',
                     help="Directory storing X_train.py, y_train.py, X_tst.py, y_test.py")
 
+parser.add_argument('--length_bounds',
+                    default=None,
+                    type=int,
+                    help="Filter out sentences longer than that for training (test set is not altered).")
 
-def cnn_model_output(input_, num_filters, filter_sizes, embedding_size, max_sentence_length, drop=0.5, regu=None):
-    conv_0 = Conv2D(num_filters, (filter_sizes[0], embedding_size), padding='valid', activation='relu', name='conv_0')(
-        input_)
-    conv_1 = Conv2D(num_filters, (filter_sizes[1], embedding_size), padding='valid', activation='relu', name='conv_1')(
-        input_)
-    conv_2 = Conv2D(num_filters, (filter_sizes[2], embedding_size), padding='valid', activation='relu', name='conv_2')(
-        input_)
-    conv_3 = Conv2D(num_filters, (filter_sizes[3], embedding_size), padding='valid', activation='relu', name='conv_3')(
-        input_)
-    conv_4 = Conv2D(num_filters, (filter_sizes[4], embedding_size), padding='valid', activation='relu', name='conv_4')(
-        input_)
 
-    maxpool_0 = MaxPooling2D((max_sentence_length - filter_sizes[0] + 1, 1), strides=(1, 1), name='maxpool_0')(conv_0)
-    maxpool_1 = MaxPooling2D((max_sentence_length - filter_sizes[1] + 1, 1), strides=(1, 1), name='maxpool_1')(conv_1)
-    maxpool_2 = MaxPooling2D((max_sentence_length - filter_sizes[2] + 1, 1), strides=(1, 1), name='maxpool_2')(conv_2)
-    maxpool_3 = MaxPooling2D((max_sentence_length - filter_sizes[3] + 1, 1), strides=(1, 1), name='maxpool_3')(conv_3)
-    maxpool_4 = MaxPooling2D((max_sentence_length - filter_sizes[4] + 1, 1), strides=(1, 1), name='maxpool_4')(conv_4)
+def cnn_model_output(input_, num_filters, filter_sizes, embedding_size, parsing_size, max_sentence_length, drop=0.45,
+                     regu=None):
+    embedding = Lambda(lambda x: x[:, :, :embedding_size, :])(input_)
 
-    merged_tensor = concatenate([maxpool_0, maxpool_1, maxpool_2, maxpool_3, maxpool_4], axis=1)
+    e_conv_0 = Conv2D(num_filters, (filter_sizes[0], embedding_size), padding='valid', activation='relu',
+                      name='e_conv_0')(
+        embedding)
+    e_conv_1 = Conv2D(num_filters, (filter_sizes[1], embedding_size), padding='valid', activation='relu',
+                      name='e_conv_1')(
+        embedding)
+    e_conv_2 = Conv2D(num_filters, (filter_sizes[2], embedding_size), padding='valid', activation='relu',
+                      name='e_conv_2')(
+        embedding)
+    e_conv_3 = Conv2D(num_filters, (filter_sizes[3], embedding_size), padding='valid', activation='relu',
+                      name='e_conv_3')(
+        embedding)
+    # e_conv_4 = Conv2D(num_filters, (filter_sizes[4], embedding_size), padding='valid', activation='relu',
+    #                   name='e_conv_4')(
+    #     embedding)
+
+    e_maxpool_0 = MaxPooling2D((max_sentence_length - filter_sizes[0] + 1, 1), strides=(1, 1), name='e_maxpool_0')(
+        e_conv_0)
+    e_maxpool_1 = MaxPooling2D((max_sentence_length - filter_sizes[1] + 1, 1), strides=(1, 1), name='e_maxpool_1')(
+        e_conv_1)
+    e_maxpool_2 = MaxPooling2D((max_sentence_length - filter_sizes[2] + 1, 1), strides=(1, 1), name='e_maxpool_2')(
+        e_conv_2)
+    e_maxpool_3 = MaxPooling2D((max_sentence_length - filter_sizes[3] + 1, 1), strides=(1, 1), name='e_maxpool_3')(
+        e_conv_3)
+    # e_maxpool_4 = MaxPooling2D((max_sentence_length - filter_sizes[4] + 1, 1), strides=(1, 1), name='e_maxpool_4')(
+    #     e_conv_4)
+
+    parsing = Lambda(lambda x: x[:, :, embedding_size:, :])(input_)
+    # rec = GRU(15)(parsing)
+    # reshape_out = Reshape((1, 1, 15))(rec)
+    p_conv_0 = Conv2D(5, (filter_sizes[0], parsing_size), padding='valid', activation='relu',
+                      name='p_conv_0')(
+        parsing)
+    p_conv_1 = Conv2D(5, (filter_sizes[1], parsing_size), padding='valid', activation='relu',
+                      name='p_conv_1')(
+        parsing)
+    p_conv_2 = Conv2D(5, (filter_sizes[2], parsing_size), padding='valid', activation='relu',
+                      name='p_conv_2')(
+        parsing)
+    # p_conv_3 = Conv2D(5, (filter_sizes[3], parsing_size), padding='valid', activation='relu',
+    #                   name='p_conv_3')(
+    #     parsing)
+    # p_conv_4 = Conv2D(5, (filter_sizes[4], parsing_size), padding='valid', activation='relu',
+    #                   name='p_conv_4')(
+    #     parsing)
+
+    p_maxpool_0 = MaxPooling2D((max_sentence_length - filter_sizes[0] + 1, 1), strides=(1, 1), name='p_maxpool_0')(
+        p_conv_0)
+    p_maxpool_1 = MaxPooling2D((max_sentence_length - filter_sizes[1] + 1, 1), strides=(1, 1), name='p_maxpool_1')(
+        p_conv_1)
+    p_maxpool_2 = MaxPooling2D((max_sentence_length - filter_sizes[2] + 1, 1), strides=(1, 1), name='p_maxpool_2')(
+        p_conv_2)
+    # p_maxpool_3 = MaxPooling2D((max_sentence_length - filter_sizes[3] + 1, 1), strides=(1, 1), name='p_maxpool_3')(
+    #     p_conv_3)
+    # p_maxpool_4 = MaxPooling2D((max_sentence_length - filter_sizes[4] + 1, 1), strides=(1, 1), name='p_maxpool_4')(
+    #     p_conv_4)
+
+    merged_tensor = concatenate(
+        [e_maxpool_0, e_maxpool_1, e_maxpool_2, e_maxpool_3, p_maxpool_0, p_maxpool_1, p_maxpool_2], axis=3)
     flatten = Flatten(name='flatten')(merged_tensor)
 
     if regu is not None:
@@ -53,7 +104,7 @@ def cnn_model_output(input_, num_filters, filter_sizes, embedding_size, max_sent
     #         dense = BatchNormalization(axis=-1)(dense)
     #     if 'DO' in regu:
     #         dense = Dropout(drop)(dense)
-    
+
     return Dense(len(CLASSES), activation='softmax', name='predictions')(flatten)
 
 
@@ -71,8 +122,7 @@ def rnn_model_output(input_, drop=0.8, regu=None):
     return dense2
 
 
-
-def rm_cnn(input_, num_filters, filter_sizes, embedding_size, max_sentence_length, drop=0.2, regu=None):
+def rm_cnn(input_, num_filters, filter_sizes, embedding_size, max_sentence_length, drop=0.4, regu=None):
     conv_01 = Conv2D(num_filters[0], (filter_sizes[0][0], embedding_size), padding='valid', activation='relu',
                      name='conv_01')(
         input_)
@@ -103,6 +153,7 @@ def rm_cnn(input_, num_filters, filter_sizes, embedding_size, max_sentence_lengt
 
     merged_tensor = concatenate([maxpool_02, maxpool_12, maxpool_22], axis=1)
     flatten = Flatten(name='flatten')(merged_tensor)
+    print(flatten.shape)
     if regu is not None:
         if 'BN' in regu:
             flatten = BatchNormalization(axis=-1)(flatten)
@@ -115,56 +166,64 @@ def main(args):
     # Loading training data
     input_train = np.load(utils.get_X_train_path(args.embedding_dir_path))
     y_train = np.load(utils.get_y_train_path(args.embedding_dir_path))
+    if args.length_bounds is not None:
+        Xy_train = filter(lambda t: len(t[0]) <= args.length_bounds, zip(input_train, y_train))
+        input_train, y_train = tuple(map(np.array, zip(*Xy_train)))
     input_test = np.load(utils.get_X_test_path(args.embedding_dir_path))
     y_test = np.load(utils.get_y_test_path(args.embedding_dir_path))
 
     # Hyper-parameters
-    filter_sizes = [2, 3, 4, 5, 6]
-    num_filters = 25
+    filter_sizes = [2, 3, 4, 5]
+    num_filters = 30
     batch_size = 50
     nb_training_examples = input_train.shape[0]
     nb_test_examples = input_test.shape[0]
     steps_per_epoch = math.ceil(nb_training_examples / batch_size)
     validation_steps = math.ceil(nb_test_examples / batch_size)
     embedding_dim = utils.get_embedding_dim()
-    max_sentence_length = 100
+    parsing_dim = utils.get_parsing_dim()
+    max_sentence_length = min(100, args.length_bounds)
     nb_epochs = 20
 
-    input_ = Input(shape=(max_sentence_length, embedding_dim, 1))
-    output = cnn_model_output(input_, num_filters, filter_sizes, embedding_dim,
+    input_ = Input(shape=(max_sentence_length, embedding_dim + parsing_dim, 1))
+    output = cnn_model_output(input_, num_filters, filter_sizes, embedding_dim, parsing_dim,
                               max_sentence_length, regu=args.regularization)
     # output = rnn_model_output(input_)
 
     model = Model(input_, output)
-
     # Compile
-    adam = Adam(lr=1e-2)
+    adam = Adam(lr=5e-3)
     # Prompt user to type in location for the logdir
     loc = input("Type in specification for log dir name:")
     # loc = 'final'
     # Callbacks for tensorboard
     logdir = './results/logdir/' + loc + '/'
     try:
-        model.load_weights('%smodel-ckpt'%logdir)
+        model.load_weights('%smodel-ckpt' % logdir)
         print('Existing model found, taking over existing weights.')
     except OSError:
         print('No existing model found. Starting training from scratch.')
+        os.mkdir(logdir)
+
+    # with open(logdir+'model.pkl', 'wb+') as f:
+    #     pickle.dump(model, f)
 
     model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['acc'])
+    model.save(logdir + 'model.h5')
 
     tb = MyTensorBoard(log_dir=logdir, histogram_freq=0, write_batch_performance=True)
     # Checkpoint
-    checkpointer = ModelCheckpoint(filepath='%smodel-ckpt'%logdir, verbose=0, save_best_only=True)
+    checkpointer = ModelCheckpoint(filepath='%smodel-ckpt' % logdir, verbose=0, save_best_only=True)
     # reduceLROnplateau
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2,
-                              patience=3, min_lr=0.001)
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.3,
+                                  patience=2, min_lr=0.0001)
 
     # Fit on generator
     model.fit_generator(
         generator=batch_generator(input_data=input_train, y=y_train,
                                   batch_size=batch_size, max_sent_length=max_sentence_length),
         steps_per_epoch=steps_per_epoch,
-        callbacks=[tb,checkpointer, reduce_lr],
+        callbacks=[tb, checkpointer, reduce_lr],
         validation_data=batch_generator(input_data=input_test, y=y_test,
                                         batch_size=batch_size, max_sent_length=max_sentence_length),
         validation_steps=validation_steps,

@@ -6,6 +6,9 @@ from tqdm import tqdm
 from unidecode import unidecode
 import numpy as np
 import pickle
+import treetaggerwrapper as tgw
+from sklearn.preprocessing import OneHotEncoder, LabelEncoder, FunctionTransformer
+import itertools
 
 import params
 import utils
@@ -18,9 +21,18 @@ COMPUTE_STOP_WORDS = False  # If False we  read them from the file above
 STOP_WORDS_TFIDF_MAX_DF = 0.1  # this is the max_df parameter for the TFIDF used to compute the stop words
 
 
+def get_tag(t):
+    try:
+        out = t.split('\t')[1].split(':')[0]
+    # Happens when parsing messes up: first split does not work.
+    except IndexError:
+        out = 'UNKNOWN'
+    return out
+
+
 class FastTextEmbedding:
     def __init__(self, sentences, y, drug_names_set, model_path, drug_description_embedding=True,
-                 stop_words=None, do_correction=False, verbose=False):
+                 stop_words=None, do_correction=False, verbose=False, parsing=True):
         assert len(sentences) == len(y), "List of sentences and y have different lengths. len(sentences) = %d, " \
                                          "len(y) = %d" % (len(sentences), len(y))
         self.sentences = sentences
@@ -31,6 +43,7 @@ class FastTextEmbedding:
         self.verbose = verbose
         self.stop_words = stop_words
         self.drug_description_embedding = drug_description_embedding
+        self.parsing = parsing
 
     def run(self, save_directory=None):
         """
@@ -40,6 +53,10 @@ class FastTextEmbedding:
         :return: A 3d-array matrix storing the text embedding.
             The matrix is of shape (nb_sentences, max_sentence_length, embedding_size)
         """
+        if self.parsing:
+            seen_tags = []
+            tagger = tgw.TreeTagger(TAGLANG='fr')
+
         if self.verbose:
             print("Loading FastText model...")
         model = FastText.load_model(MODEL_PATH)
@@ -52,14 +69,21 @@ class FastTextEmbedding:
                 with open(drug_embedding_path, 'rb') as f:
                     drug_embeddings = pickle.load(f)
             except FileNotFoundError:
-                    self.drug_description_embedding = False
-                    print('Drugs will be embedded as "médicament".')
+                self.drug_description_embedding = False
+                print('Drugs will be embedded as "médicament".')
 
         for i, sentence in tqdm(enumerate(self.sentences), desc='Embedding words for each sentence...',
                                 disable=not self.verbose, total=len(self.sentences)):
             sentence_embedding = []
+
+            if self.parsing:
+                sentence_parsing = []
+
             sentence = sentence.lower()
             splits = FastText.tokenize(sentence)
+            # Need to perform parsing on the exact same sentence as embedding. I need to keep track of
+            # Words which are discarded and those which are not.
+            sentence_tokenized = []
             for word in splits:
                 # Skipping non-words
                 if not re.match('(\w)+', word) or word in self.stop_words:
@@ -92,12 +116,42 @@ class FastTextEmbedding:
                         word = suggestions[0]
 
                 # Embedding
+                sentence_tokenized.append(word)
                 sentence_embedding.append(model.get_word_vector(word))
+
+            # Parsing
+            if self.parsing:
+                tags = tagger.tag_text(sentence_tokenized)
+                sentence_parsing = [get_tag(t) for t in tags]
+                seen_tags.extend(sentence_parsing)
+                seen_tags = list(set(seen_tags))
+
             if sentence_embedding:
-                sentences_list.append(sentence_embedding)
+                if self.parsing:
+                    sentences_list.append((sentence_embedding, sentence_parsing))
+                else:
+                    sentences_list.append(sentence_embedding)
             else:
                 print("Warning: Found an empty sentence embedding. Ignoring.")
                 del self.y[i]
+
+        # Now need to one-hot encode
+        if self.parsing:
+            # tags = []
+            for (i, s) in enumerate(sentences_list):
+                replacement = []
+                for (j, w) in enumerate(zip(*s)):
+                    # Either check now or build a set later.
+                    # 'try … except' ensure the sentence is iterated over only once.
+                    # try:
+                    #     w = np.hstack((w[0], np.array(tags.index(w[1]))))
+                    # except ValueError:
+                    #     tags.append(w[1])
+                    #     w = np.hstack((w[0], np.array(len(tags))))
+                    w_mat = np.zeros((len(seen_tags,)))
+                    w_mat[seen_tags.index(w[1])] = 1
+                    replacement.append(np.hstack((w[0], w_mat)))
+                sentences_list[i] = replacement
 
         #     # Updating max_sentence_length
         #     sentence_length = len(sentence_embedding)
