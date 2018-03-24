@@ -22,9 +22,10 @@ class TfidfEmbeddingVectorizer(object):
         self.dim = embedding_dim
         self.max_nb_words = max_nb_words
 
-    def tokenize_sentences(self, X):
+    @staticmethod
+    def tokenize_sentences(X):
         tokenized_sentences = []
-        for i, sentence in tqdm(enumerate(X), desc="Tokenizing and correcting words...",
+        for i, sentence in tqdm(enumerate(X), desc="Tokenizing words...",
                                 total=len(X)):
             sentence = sentence.lower()
             splits = word_tokenize(sentence, language='french')
@@ -74,15 +75,15 @@ class TfidfEmbeddingVectorizer(object):
                 print([(w, self.word2weight[w]) for w in sorted_words])
 
             idf_threshold = self.word2weight[sorted_words[min(self.max_nb_words - 1, len(sorted_words) - 1)]]
-            total_weight = np.sum([self.word2weight[w] for w in sorted_words if self.word2weight[w] >= idf_threshold])
+            # total_weight = np.sum([self.word2weight[w] for w in sorted_words if self.word2weight[w] >= idf_threshold])
             if i == 1069:
-                print(idf_threshold / total_weight)
+                print(idf_threshold)  # / total_weight)
             for w in words:
                 if w == 'nf':
                     w = 'médicament'
                 if self.word2weight[w] < idf_threshold:
                     continue
-                sentence_embedding.append(self.fasttext_model.get_word_vector(w) * self.word2weight[w] / total_weight)
+                sentence_embedding.append(self.fasttext_model.get_word_vector(w) * self.word2weight[w])  # / total_weight)
                 list_words.append(w)
             if i == 1069:
                 print(len(list_words), ' '.join(list_words))
