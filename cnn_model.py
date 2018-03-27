@@ -10,6 +10,7 @@ import argparse
 import numpy as np
 from params import CLASSES
 import os
+from sklearn.utils import class_weight, shuffle
 
 parser = argparse.ArgumentParser(description="This script runs the main experiments.")
 
@@ -18,7 +19,7 @@ parser.add_argument('--regularization',
                     help="Should regularization method between DO and/or BN")
 
 parser.add_argument('--embedding_dir_path',
-                    default='./results/embedding/small_fast_text_embedding_wo_stop_words_parsed/',
+                    default='./results/embedding/fast_text_embedding_wo_stop_words_parsed/',
                     help="Directory storing X_train.py, y_train.py, X_tst.py, y_test.py")
 
 parser.add_argument('--length_bounds',
@@ -40,9 +41,9 @@ def cnn_model_output(input_, num_filters, filter_sizes, embedding_size, parsing_
     e_conv_2 = Conv2D(num_filters, (filter_sizes[2], embedding_size), padding='valid', activation='relu',
                       name='e_conv_2')(
         embedding)
-    e_conv_3 = Conv2D(num_filters, (filter_sizes[3], embedding_size), padding='valid', activation='relu',
-                      name='e_conv_3')(
-        embedding)
+    # e_conv_3 = Conv2D(num_filters, (filter_sizes[3], embedding_size), padding='valid', activation='relu',
+    #                   name='e_conv_3')(
+    #     embedding)
     # e_conv_4 = Conv2D(num_filters, (filter_sizes[4], embedding_size), padding='valid', activation='relu',
     #                   name='e_conv_4')(
     #     embedding)
@@ -53,8 +54,8 @@ def cnn_model_output(input_, num_filters, filter_sizes, embedding_size, parsing_
         e_conv_1)
     e_maxpool_2 = MaxPooling2D((max_sentence_length - filter_sizes[2] + 1, 1), strides=(1, 1), name='e_maxpool_2')(
         e_conv_2)
-    e_maxpool_3 = MaxPooling2D((max_sentence_length - filter_sizes[3] + 1, 1), strides=(1, 1), name='e_maxpool_3')(
-        e_conv_3)
+    # e_maxpool_3 = MaxPooling2D((max_sentence_length - filter_sizes[3] + 1, 1), strides=(1, 1), name='e_maxpool_3')(
+    #     e_conv_3)
     # e_maxpool_4 = MaxPooling2D((max_sentence_length - filter_sizes[4] + 1, 1), strides=(1, 1), name='e_maxpool_4')(
     #     e_conv_4)
 
@@ -89,7 +90,7 @@ def cnn_model_output(input_, num_filters, filter_sizes, embedding_size, parsing_
     #     p_conv_4)
 
     merged_tensor = concatenate(
-        [e_maxpool_0, e_maxpool_1, e_maxpool_2, e_maxpool_3, p_maxpool_0, p_maxpool_1, p_maxpool_2], axis=3)
+        [e_maxpool_0, e_maxpool_1, e_maxpool_2, p_maxpool_0, p_maxpool_1, p_maxpool_2], axis=3)
     flatten = Flatten(name='flatten')(merged_tensor)
 
     if regu is not None:
@@ -166,14 +167,26 @@ def main(args):
     # Loading training data
     input_train = np.load(utils.get_X_train_path(args.embedding_dir_path))
     y_train = np.load(utils.get_y_train_path(args.embedding_dir_path))
+    # Augment by "rotating":
+    input_train, y_train = shuffle(
+        numpy.concatenate((input_train, numpy.array([s[::-1] for s in input_train]))),
+        numpy.concatenate((y_train, y_train))
+    )
+    # RUS
+    over_repr = [42, 32, 14, 48, 34, 22, 44, 31, 28]  # More than 200 individuals
+    input_train, y_train = tuple(map(np.array, zip(
+        *filter(lambda t: (numpy.random.randint(2) if t[1] in over_repr else 1) == 1, zip(input_train, y_train)))))
     if args.length_bounds is not None:
         Xy_train = filter(lambda t: len(t[0]) <= args.length_bounds, zip(input_train, y_train))
         input_train, y_train = tuple(map(np.array, zip(*Xy_train)))
     input_test = np.load(utils.get_X_test_path(args.embedding_dir_path))
     y_test = np.load(utils.get_y_test_path(args.embedding_dir_path))
 
+    # Get class weights:
+    cl_w = class_weight.compute_class_weight('balanced', np.unique(y_train), y_train)
+
     # Hyper-parameters
-    filter_sizes = [2, 3, 4, 5]
+    filter_sizes = [1, 2, 3]
     num_filters = 30
     batch_size = 50
     nb_training_examples = input_train.shape[0]
@@ -188,7 +201,6 @@ def main(args):
     input_ = Input(shape=(max_sentence_length, embedding_dim + parsing_dim, 1))
     output = cnn_model_output(input_, num_filters, filter_sizes, embedding_dim, parsing_dim,
                               max_sentence_length, regu=args.regularization)
-    # output = rnn_model_output(input_)
 
     model = Model(input_, output)
     # Compile
@@ -230,6 +242,7 @@ def main(args):
         epochs=nb_epochs,
         verbose=1,
         use_multiprocessing=False,
+        # class_weight=cl_w,
         workers=1
     )
 
