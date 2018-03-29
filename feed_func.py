@@ -3,6 +3,7 @@ import numpy
 from utils import get_embedding_dim, get_parsing_dim
 import time
 from keras.utils import to_categorical
+from sklearn.preprocessing import normalize
 
 
 def batch_generator(input_data, y, batch_size, max_sent_length, n_channels=1, length_bounds=None):
@@ -33,8 +34,9 @@ def batch_generator(input_data, y, batch_size, max_sent_length, n_channels=1, le
         # pad all the matrices (sentences) one by one.
         e = get_embedding_dim() + get_parsing_dim()
         for k, m in enumerate(mats):
-            mats[k] = numpy.vstack((mats[k], numpy.zeros(((max_sent_length - m.shape[0]), e))))
+            # mats[k] = numpy.vstack((mats[k], numpy.zeros(((max_sent_length - m.shape[0]), e))))
             if n_channels > 0:
+                # mats[k] = normalize(mats[k])
                 mats[k] = mats[k].reshape(max_sent_length, e, n_channels)
 
         # Now stack em all in a 3D tensor of shape (batch_size, sent_length, embedding_size)
@@ -45,9 +47,9 @@ def batch_generator(input_data, y, batch_size, max_sent_length, n_channels=1, le
         i = (i + 1) % steps_per_epoch
 
         # Reshape y
-        y_keras = to_categorical(y_batch, num_classes=51)
+        # y_batch = to_categorical(y_batch, num_classes=51)
 
-        yield (batch, y_keras)
+        yield (batch, y_batch)
 
 
 def main():
