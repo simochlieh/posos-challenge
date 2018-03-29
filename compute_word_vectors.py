@@ -211,6 +211,7 @@ class FastTextEmbedding:
                             emb_w = drug_embeddings[unidecode(word)]
                             sentence_embedding.append(emb_w / np.sqrt(emb_w.dot(emb_w)))
                             found_drug_emb = True
+                            count_words += 1
                             continue
                         except KeyError:
                             word = DRUG_REPLACEMENT
@@ -240,12 +241,13 @@ class FastTextEmbedding:
         utils.create_dir('./results/preprocessed/X_%s' % ('train' if not test else 'test'))
         self.write_corrected_sentences(all_processed_sent, labels, path='./results/preprocessed/X_%s' %
                                                                         ('train' if not test else 'test'))
+        assert self.max_sentence_len >= max_sentence_length
         text_embedding = []
         padding_token = np.zeros((utils.get_embedding_dim(),))  # model.get_word_vector(FastText.EOS)
         for sentence_embedding in sentences_list:
             sentence_length = len(sentence_embedding)
             sentence_embedding.extend([padding_token]  # / np.sqrt(padding_token.dot(padding_token))]
-                                      * (max_sentence_length - sentence_length))
+                                      * (self.max_sentence_len - sentence_length))
             text_embedding.append(sentence_embedding)
 
         # Deleting list of sentences
@@ -296,8 +298,8 @@ def main():
 
     fast_text_embedding = FastTextEmbedding(input_train.question, y.intention, drug_description_embedding=False,
                                             drug_names_set=drug_names_set, stop_words=[],
-                                            model_path=MODEL_PATH, do_correction=True, verbose=True,
-                                            corrected_sent_path='./results/corr/input_train', max_sentence_len=195,
+                                            model_path=MODEL_PATH, do_correction=False, verbose=True,
+                                            corrected_sent_path='./results/corr/input_train', max_sentence_len=600,
                                             test_input=input_test.question)
     utils.create_dir(EMBEDDING_DIRPATH)
     fast_text_embedding.run(save_directory=EMBEDDING_DIRPATH)

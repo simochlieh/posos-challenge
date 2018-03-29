@@ -143,7 +143,7 @@ def main(args):
 
     # Hyper-parameters
     filter_sizes = [1, 2]
-    num_filters = 1000
+    num_filters = 2000
     batch_size = 32
     nb_training_examples = input_train.shape[0]
     nb_test_examples = input_test.shape[0]
@@ -164,7 +164,7 @@ def main(args):
     Training = True
     if Training:
         # Compile
-        adam = Adam(lr=1e-4)
+        adam = Adam(lr=1e-3)
 
         model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['acc', top_5_acc])
 
