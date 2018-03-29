@@ -3,8 +3,6 @@ from keras.layers import Dense, Conv2D, MaxPooling2D, Dropout, Flatten, concaten
     Convolution1D, MaxPooling1D, Concatenate
 from keras.optimizers import Adam
 from keras.models import Model
-
-import params
 from feed_func import *
 import utils
 from tensorboard_callback import MyTensorBoard
@@ -14,7 +12,6 @@ import numpy as np
 from sklearn import metrics
 from params import CLASSES
 from keras import metrics as kmetrics
-import pandas as pnd
 
 parser = argparse.ArgumentParser(description="This script runs the main experiments.")
 
@@ -127,8 +124,7 @@ def main(args):
     input_train = input_train[:, :, :embedding_dim, np.newaxis]
 
     y_train = np.load(utils.get_y_train_path(args.embedding_dir_path))
-    idx_to_id_train = y_train[:, 0]
-    y_train = to_categorical(y_train[:, 1], num_classes=len(CLASSES))
+    y_train = to_categorical(y_train, num_classes=len(CLASSES))
 
     input_test = np.load(utils.get_X_test_path(args.embedding_dir_path))
     # input_test = (input_test - mean_train) / std_train
@@ -140,15 +136,14 @@ def main(args):
     # y_final_test = to_categorical(y_final_test, num_classes=len(CLASSES))
 
     y_test = np.load(utils.get_y_test_path(args.embedding_dir_path))
-    idx_to_id_test = y_test[:, 0]
-    y_test = to_categorical(y_test[:, 1], num_classes=len(CLASSES))
+    y_test = to_categorical(y_test, num_classes=len(CLASSES))
 
     all_input = np.vstack([input_train, input_test])
     all_y = np.vstack([y_train, y_test])
 
     # Hyper-parameters
     filter_sizes = [1, 2]
-    num_filters = 300
+    num_filters = 1000
     batch_size = 32
     nb_training_examples = input_train.shape[0]
     nb_test_examples = input_test.shape[0]
@@ -157,7 +152,7 @@ def main(args):
 
     max_sentence_length = max([len(sentence) for sentence in input_train])
     print(max_sentence_length)
-    nb_epochs = 20
+    nb_epochs = 50
 
     input_ = Input(shape=(max_sentence_length, embedding_dim, 1))
     output = cnn_model_output(input_, num_filters, filter_sizes, embedding_dim,
@@ -169,7 +164,7 @@ def main(args):
     Training = True
     if Training:
         # Compile
-        adam = Adam(lr=1e-3)
+        adam = Adam(lr=1e-4)
 
         model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['acc', top_5_acc])
 
@@ -206,27 +201,7 @@ def main(args):
         y_test_o = np.argmax(y_test, axis=1)
         acc = metrics.accuracy_score(y_test_o, y_pred)
         print(acc)
-
-        data_train = pnd.read_csv(params.INPUT_TRAIN_FILENAME, sep=';')
-        processed = pnd.read_csv('results/preprocessed/X_train', sep=';', names=['question', 'ID'])
-        y = pnd.read_csv(utils.get_labels_path(), sep=';')
-
-        for i, prediction in enumerate(y_pred):
-            if y_pred[i] != y_test_o[i]:
-                id = idx_to_id_test[i]
-                print(data_train.loc[id, 'question'])
-                print(processed.loc[id, 'question'])
-                print(y_test_o[i])
-                print(y_pred[i])
-                print()
-
-        intent = 39
-        print("intent %d:" % intent)
-        for i in range(data_train.shape[0]):
-            if y.loc[i, 'intention'] == intent:
-                print(data_train.loc[i, 'question'])
-
-        utils.to_csv(y_pred, './results/cnn/y_pred_final_2.csv')
+        utils.to_csv(y_pred, './results/cnn/y_pred_final.csv')
 
 
 if __name__ == '__main__':
