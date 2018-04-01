@@ -12,6 +12,7 @@ from unidecode import unidecode
 import numpy as np
 import pickle
 from copy import deepcopy
+import treetaggerwrapper as tgw
 
 import params
 import utils
@@ -22,15 +23,25 @@ MODEL_PATH = './wiki.fr/wiki.fr.bin'
 EMBEDDING_DIRPATH = './results/embedding/fast_text_embedding_top_50_tfidf_no_corr_w_drug_emb_test_0/'
 STOP_WORDS_FILEPATH = './data/stopwords-fr.txt'
 DRUG_REPLACEMENT = 'médicament'
-COMPUTE_STOP_WORDS = False  # If False we  read them from the file above
+COMPUTE_STOP_WORDS = True  # If False we  read them from the file above
 STOP_WORDS_TFIDF_MAX_DF = 0.1  # this is the max_df parameter for the TFIDF used to compute the stop words
+
+
+def get_tag(t):
+    try:
+        out = t.split('\t')[1].split(':')[0]
+    # Happens when parsing messes up: first split does not work.
+    except IndexError:
+        out = 'UNKNOWN'
+    return out
 
 
 class FastTextEmbedding:
     def __init__(self, sentences, y, drug_names_set, model_path, test_input, drug_description_embedding=True,
                  stop_words=None, do_correction=False, verbose=False, max_sentence_len=50, corrected_sent_path=None,
-                 y_val=None):
+                 y_val=None, parsing=True):
 
+        self.parsing = parsing
         self.sentences = sentences
         self.tokenized_sentences = []
         self.y_train = deepcopy(y.values)
@@ -90,10 +101,15 @@ class FastTextEmbedding:
         return tokenized_sentences, labels
 
     @staticmethod
-    def write_corrected_sentences(X, labels, path):
+    def write_corrected_sentences(X, labels, parsings, path):
         with open(path, 'w', encoding=params.UTF_8) as out:
-            for i, sentence in enumerate(X):
-                out.writelines(' '.join(sentence) + ((';' + str(labels[i])) if labels else '') + '\n')
+            if parsings:
+                for i, (sentence, parsing) in enumerate(zip(X, parsings)):
+                    out.writelines(' '.join(sentence) + ((';' + str(labels[i])) if labels else '') + '\n')
+                    out.writelines(' '.join(parsing) + '\n')
+            else:
+                for i, sentence in enumerate(X):
+                    out.writelines(' '.join(sentence) + ((';' + str(labels[i])) if labels else '') + '\n')
 
     def read_corrected_sentences(self):
         tokenized_sent = []
@@ -137,7 +153,6 @@ class FastTextEmbedding:
         # tokenize sentences
         self.tokenized_sentences, labels = self.tokenize_sentences(self.sentences)
         self.tokenized_test_sent, _ = self.tokenize_sentences(self.test_input, test=True)
-        self.write_corrected_sentences(self.tokenized_sentences, labels, path=self.corrected_sent_path)
         # Computing tfidf weights
         self.compute_tfidf_weights(self.tokenized_sentences, labels)
 
@@ -176,12 +191,19 @@ class FastTextEmbedding:
 
     def embedding(self, X, model, drug_embeddings, labels=None, test=False):
 
+        seen_tags = []
+        if self.parsing:
+            tagger = tgw.TreeTagger(TAGLANG='fr')
+        else:
+            tagger = None
+
         sentences_list = []
 
         max_sentence_length = 0
         count_drugs_emb = 0
         count_drugs_match = 0
         all_processed_sent = []
+        all_parsing = []
         for i, sentence in tqdm(enumerate(X), desc='Embedding words for each sentence...',
                                 disable=not self.verbose, total=len(X)):
             sentence_embedding = []
@@ -223,12 +245,23 @@ class FastTextEmbedding:
                 sentence_embedding.append(word_vec / np.sqrt(word_vec.dot(word_vec)))
                 chosen_words.append(word)
                 count_words += 1
-            all_processed_sent.append(chosen_words)
             if found_drug_emb:
                 count_drugs_emb += 1
             if found_drug_match:
                 count_drugs_match += 1
-            sentences_list.append(sentence_embedding)
+
+            # Parsing
+            if self.parsing:
+                tags = tagger.tag_text(chosen_words)
+                sentence_parsing = [get_tag(t) for t in tags]
+                seen_tags.extend(sentence_parsing)
+                seen_tags = list(set(seen_tags))
+                all_processed_sent.append(chosen_words)
+                all_parsing.append(sentence_parsing)
+                sentences_list.append((sentence_embedding, sentence_parsing))
+            else:
+                sentences_list.append(sentence_embedding)
+
             if len(sentence_embedding) > self.max_sentence_len:
                 print('\n', len(sentence_embedding), self.y_train[i] if not test else None, sentence)
 
@@ -236,14 +269,26 @@ class FastTextEmbedding:
             sentence_length = len(sentence_embedding)
             if sentence_length > max_sentence_length:
                 max_sentence_length = sentence_length
-        # print(np.array(sentences_list).mean())
-        # Padding sentence matrices with 0 vectors
+
+        # Now need to one-hot encode
+        if self.parsing:
+            # tags = []
+            for (i, s) in enumerate(sentences_list):
+                replacement = []
+                for (j, w) in enumerate(zip(*s)):
+                    w_mat = np.zeros((len(seen_tags)))
+                    w_mat[seen_tags.index(w[1])] = 1
+                    replacement.append(np.hstack((w[0], w_mat)))
+                sentences_list[i] = replacement
+
         utils.create_dir('./results/preprocessed/X_%s' % ('train' if not test else 'test'))
-        self.write_corrected_sentences(all_processed_sent, labels, path='./results/preprocessed/X_%s' %
+        self.write_corrected_sentences(all_processed_sent, labels, all_parsing, path='./results/preprocessed/X_%s' %
                                                                         ('train' if not test else 'test'))
+
+        # Padding sentence matrices with 0 vectors
         assert self.max_sentence_len >= max_sentence_length
         text_embedding = []
-        padding_token = np.zeros((utils.get_embedding_dim(),))  # model.get_word_vector(FastText.EOS)
+        padding_token = np.zeros((utils.get_embedding_dim() + len(seen_tags),))  # model.get_word_vector(FastText.EOS)
         for sentence_embedding in sentences_list:
             sentence_length = len(sentence_embedding)
             sentence_embedding.extend([padding_token]  # / np.sqrt(padding_token.dot(padding_token))]
@@ -252,40 +297,19 @@ class FastTextEmbedding:
 
         # Deleting list of sentences
         del sentences_list
+
         print("\nEmbedded drug names in %d sentences" % count_drugs_emb)
         print("\nMatched drug names in %d sentences" % count_drugs_match)
         embeddings = np.array(text_embedding)
         print("\nSaving text embedding of shape %s" % str(embeddings.shape))
 
-        if labels:
-            # Removing classes with 1 element
-            nb_per_class = Counter(labels)
-            classes_to_remove = []
-            for key, value in nb_per_class.items():
-                if value == 1:
-                    classes_to_remove.append(key)
-            print(len(nb_per_class))
-            print("\nClasses to remove %s" % classes_to_remove)
-
-            remove_ops = 0
-            for i, class_ in enumerate(labels):
-                if class_ in classes_to_remove:
-                    del labels[i]
-                    embeddings = np.delete(embeddings, i, 0)
-                    remove_ops += 1
-
-            print("\nRemoved %d points" % remove_ops)
         return embeddings, labels
 
 
 def main():
     input_train = pnd.read_csv(params.INPUT_TRAIN_FILENAME, sep=';')
-
     input_test = pnd.read_csv(params.INPUT_TEST_FILENAME, sep=';', encoding='utf-8-sig')
     y = pnd.read_csv(utils.get_labels_path(), sep=';')
-
-    input_train_tr, input_train_v, y_tr, y_v = train_test_split(input_train.question, y.intention, test_size=0.2,
-                                                                stratify=y.intention, random_state=41)
 
     drug_names_path = utils.get_drug_names_path()
     drug_names_df = pnd.read_csv(drug_names_path)
@@ -297,10 +321,10 @@ def main():
         print("stop words: %s" % ', '.join(stop_words))
 
     fast_text_embedding = FastTextEmbedding(input_train.question, y.intention, drug_description_embedding=False,
-                                            drug_names_set=drug_names_set, stop_words=[],
+                                            drug_names_set=drug_names_set, stop_words=stop_words,
                                             model_path=MODEL_PATH, do_correction=False, verbose=True,
-                                            corrected_sent_path='./results/corr/input_train', max_sentence_len=600,
-                                            test_input=input_test.question)
+                                            corrected_sent_path='./results/corr/input_train', max_sentence_len=200,
+                                            test_input=input_test.question, parsing=True)
     utils.create_dir(EMBEDDING_DIRPATH)
     fast_text_embedding.run(save_directory=EMBEDDING_DIRPATH)
 
